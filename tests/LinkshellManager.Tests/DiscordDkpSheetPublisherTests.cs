@@ -72,7 +72,7 @@ public class DiscordDkpSheetPublisherTests
         {
             db.AppUserLinkshells.Add(new AppUserLinkshell
             {
-                Id = i, LinkshellId = 1, CharacterName = $"Member{i:000}", LinkshellDkp = 10
+                Id = i, LinkshellId = 1, LinkshellDkp = 10
             });
         }
         db.LinkshellChannelRoutes.Add(new LinkshellChannelRoute

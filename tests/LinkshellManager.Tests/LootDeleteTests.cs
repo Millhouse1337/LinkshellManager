@@ -41,12 +41,12 @@ public class LootDeleteTests
         db.Linkshells.Add(new Linkshell { Id = Ls, LinkshellName = "LS", LootStructure = "Dkp" });
         var actor = new AppUser
         {
-            Id = "u1", UserName = "edicius", CharacterName = "Edicius", AltCharacterName1 = "Athmilk"
-        };
+            Id = "u1", UserName = "edicius", CharacterName = "Edicius",
+        }.WithAlts("Athmilk");
         db.Users.Add(actor);
         db.AppUserLinkshells.Add(new AppUserLinkshell
         {
-            Id = 1, LinkshellId = Ls, AppUserId = "u1", CharacterName = "Edicius", LinkshellDkp = 70
+            Id = 1, LinkshellId = Ls, AppUserId = "u1", LinkshellDkp = 70
         });
         var history = new EventHistory
         {

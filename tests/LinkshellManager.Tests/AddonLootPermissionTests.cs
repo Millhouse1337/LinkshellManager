@@ -39,7 +39,7 @@ public class AddonLootPermissionTests
         {
             db.LinkshellRoles.Add(role);
         }
-        db.AppUserLinkshells.Add(new AppUserLinkshell { LinkshellId = Ls, AppUserId = "poster", CharacterName = "Poster", Rank = rank });
+        db.AppUserLinkshells.Add(new AppUserLinkshell { LinkshellId = Ls, AppUserId = "poster", Rank = rank });
         await db.SaveChangesAsync();
         return db;
     }
@@ -142,7 +142,7 @@ public class AddonLootPermissionTests
         db.Users.Add(new AppUser { Id = "winner", UserName = "alice", CharacterName = "Alice" });
         db.AppUserLinkshells.Add(new AppUserLinkshell
         {
-            Id = 1, LinkshellId = Ls, AppUserId = "winner", CharacterName = "Alice", LinkshellDkp = 100,
+            Id = 1, LinkshellId = Ls, AppUserId = "winner", LinkshellDkp = 100,
         });
         await db.SaveChangesAsync();
 

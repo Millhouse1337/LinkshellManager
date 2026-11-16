@@ -295,8 +295,8 @@ internal static class DiscordInteractionHarness
         db.LinkshellRoles.AddRange(LinkshellRoleDefaults.BuildDefaultRoles(1));
         db.Users.Add(new AppUser { Id = "u1", UserName = "u1", CharacterName = "Mill" });
         db.Users.Add(new AppUser { Id = "u2", UserName = "u2", CharacterName = "Offy" });
-        db.AppUserLinkshells.Add(new AppUserLinkshell { AppUserId = "u1", LinkshellId = 1, Rank = LinkshellRanks.Member, CharacterName = "Mill", Status = "Active" });
-        db.AppUserLinkshells.Add(new AppUserLinkshell { AppUserId = "u2", LinkshellId = 1, Rank = LinkshellRanks.Officer, CharacterName = "Offy", Status = "Active" });
+        db.AppUserLinkshells.Add(new AppUserLinkshell { AppUserId = "u1", LinkshellId = 1, Rank = LinkshellRanks.Member, Status = "Active" });
+        db.AppUserLinkshells.Add(new AppUserLinkshell { AppUserId = "u2", LinkshellId = 1, Rank = LinkshellRanks.Officer, Status = "Active" });
         db.DiscordActivityUsers.Add(new DiscordActivityUser { DiscordUserId = "d1", Username = "userd1", IdentityUserId = "u1" });
         db.DiscordActivityUsers.Add(new DiscordActivityUser { DiscordUserId = "d2", Username = "userd2", IdentityUserId = "u2" });
 

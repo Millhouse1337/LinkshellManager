@@ -103,11 +103,11 @@ public class HnmCampCapturePricingTests
         db.Users.Add(new AppUser { Id = BetaId, UserName = "beta", CharacterName = "Beta" });
         db.AppUserLinkshells.Add(new AppUserLinkshell
         {
-            Id = 1, LinkshellId = LinkshellId, AppUserId = AlphaId, CharacterName = "Alpha",
+            Id = 1, LinkshellId = LinkshellId, AppUserId = AlphaId,
         });
         db.AppUserLinkshells.Add(new AppUserLinkshell
         {
-            Id = 2, LinkshellId = LinkshellId, AppUserId = BetaId, CharacterName = "Beta",
+            Id = 2, LinkshellId = LinkshellId, AppUserId = BetaId,
         });
 
         var scanId = 1;

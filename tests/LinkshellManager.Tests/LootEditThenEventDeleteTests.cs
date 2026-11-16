@@ -40,12 +40,12 @@ public class LootEditThenEventDeleteTests
         db.Users.Add(new AppUser { Id = "u2", UserName = "bob", CharacterName = "Bob" });
         var edicius = new AppUserLinkshell
         {
-            Id = 1, LinkshellId = Ls, AppUserId = "u1", CharacterName = "Edicius", LinkshellDkp = 100
+            Id = 1, LinkshellId = Ls, AppUserId = "u1", LinkshellDkp = 100
         };
         db.AppUserLinkshells.Add(edicius);
         db.AppUserLinkshells.Add(new AppUserLinkshell
         {
-            Id = 2, LinkshellId = Ls, AppUserId = "u2", CharacterName = "Bob", LinkshellDkp = 50
+            Id = 2, LinkshellId = Ls, AppUserId = "u2", LinkshellDkp = 50
         });
         db.EventHistories.Add(new EventHistory
         {

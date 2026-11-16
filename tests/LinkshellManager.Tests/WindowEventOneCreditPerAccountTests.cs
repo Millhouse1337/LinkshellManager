@@ -54,16 +54,16 @@ public class WindowEventOneCreditPerAccountTests
         db.Linkshells.Add(new Linkshell { Id = LinkshellId, LinkshellName = "Test" });
         db.Users.Add(new AppUser
         {
-            Id = AlphaId, UserName = "alpha", CharacterName = "Alpha", AltCharacterName1 = "Alphalt",
-        });
+            Id = AlphaId, UserName = "alpha", CharacterName = "Alpha",
+        }.WithAlts("Alphalt"));
         db.Users.Add(new AppUser { Id = BobId, UserName = "bob", CharacterName = "Bob" });
         db.AppUserLinkshells.Add(new AppUserLinkshell
         {
-            Id = 1, LinkshellId = LinkshellId, AppUserId = AlphaId, CharacterName = "Alpha", LinkshellDkp = 0,
+            Id = 1, LinkshellId = LinkshellId, AppUserId = AlphaId, LinkshellDkp = 0,
         });
         db.AppUserLinkshells.Add(new AppUserLinkshell
         {
-            Id = 2, LinkshellId = LinkshellId, AppUserId = BobId, CharacterName = "Bob", LinkshellDkp = 0,
+            Id = 2, LinkshellId = LinkshellId, AppUserId = BobId, LinkshellDkp = 0,
         });
 
         if (priced)

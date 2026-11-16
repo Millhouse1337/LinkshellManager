@@ -45,8 +45,8 @@ public class PlaceholderClaimMergeTests : IAsyncLifetime
             db.Linkshells.Add(linkshell);
             db.Users.Add(new AppUser { Id = Real, UserName = "real", CharacterName = "Bob" });
             db.Users.Add(new AppUser { Id = Ph, UserName = "ph", CharacterName = "Bobalt", IsPlaceholder = true });
-            var realMember = new AppUserLinkshell { Linkshell = linkshell, AppUserId = Real, CharacterName = "Bob", LinkshellDkp = 30 };
-            var phMember = new AppUserLinkshell { Linkshell = linkshell, AppUserId = Ph, CharacterName = "Bobalt", LinkshellDkp = 100 };
+            var realMember = new AppUserLinkshell { Linkshell = linkshell, AppUserId = Real, LinkshellDkp = 30 };
+            var phMember = new AppUserLinkshell { Linkshell = linkshell, AppUserId = Ph, LinkshellDkp = 100 };
             db.AppUserLinkshells.AddRange(realMember, phMember);
             await db.SaveChangesAsync();
             linkshellId = linkshell.Id;
@@ -177,7 +177,7 @@ public class PlaceholderClaimMergeTests : IAsyncLifetime
             db.Linkshells.Add(linkshell);
             db.Users.Add(new AppUser { Id = Real, UserName = "real", CharacterName = "Bob" });
             db.Users.Add(new AppUser { Id = Ph, UserName = "ph", CharacterName = "Bobalt", IsPlaceholder = true });
-            var phMember = new AppUserLinkshell { Linkshell = linkshell, AppUserId = Ph, CharacterName = "Bobalt" };
+            var phMember = new AppUserLinkshell { Linkshell = linkshell, AppUserId = Ph };
             db.AppUserLinkshells.Add(phMember);
             await db.SaveChangesAsync();
             linkshellId = linkshell.Id;

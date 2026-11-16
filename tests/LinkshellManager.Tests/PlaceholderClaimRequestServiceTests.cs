@@ -25,7 +25,7 @@ public class PlaceholderClaimRequestServiceTests
         db.Users.Add(new AppUser { Id = "real", UserName = "real", CharacterName = "Bobalt" });
         db.Users.Add(new AppUser { Id = "other", UserName = "other", CharacterName = "Bobalt" });
         db.Users.Add(new AppUser { Id = "ph", UserName = "ph", CharacterName = "Bobalt", IsPlaceholder = true });
-        db.AppUserLinkshells.Add(new AppUserLinkshell { Id = 11, LinkshellId = Ls, AppUserId = "ph", CharacterName = "Bobalt", LinkshellDkp = 100 });
+        db.AppUserLinkshells.Add(new AppUserLinkshell { Id = 11, LinkshellId = Ls, AppUserId = "ph", LinkshellDkp = 100 });
         db.SaveChanges();
         return db;
     }

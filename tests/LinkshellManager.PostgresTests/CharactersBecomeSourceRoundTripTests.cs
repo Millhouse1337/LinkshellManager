@@ -137,7 +137,8 @@ public class CharactersBecomeSourceRoundTripTests
     };
 
     // Step 1 is the previous build's copy, frozen: for any account it gives the rows
-    // CharacterSync.DesiredRows (the same rules in C#) gives.
+    // CharacterSync.DesiredRows (the same rules in C#) gave. Round5Contract deleted DesiredRows with
+    // the old account columns, so its rules are frozen below too (FrozenDesiredRows).
     [Fact]
     public async Task TheFrozenCopy_GivesTheRowsCharacterSyncDesiredRowsGives()
     {
@@ -169,13 +170,10 @@ public class CharactersBecomeSourceRoundTripTests
                 $"UPDATE \"AspNetUsers\" SET \"CharacterName\" = '{new string('y', 257)}', \"AltCharacterName1\" = 'Keep' WHERE \"Id\" = 'p8'");
 
             var expected = new List<string>();
-            await using (var db = SchemaTestDatabase.CreateContext(connectionString))
+            foreach (var account in (await OldAccountColumnsAsync(connectionString)).OrderBy(a => a.Id, System.StringComparer.Ordinal))
             {
-                foreach (var user in (await db.Users.AsNoTracking().ToListAsync()).OrderBy(u => u.Id, System.StringComparer.Ordinal))
-                {
-                    expected.AddRange(CharacterSync.DesiredRows(user).Select(row =>
-                        $"{user.Id}|{row.Slot}|{row.Name}|{row.NormalizedName}|{Json(row.JobLevels)}|{Json(row.CraftLevels)}"));
-                }
+                expected.AddRange(FrozenDesiredRows(account).Select(row =>
+                    $"{account.Id}|{row.Slot}|{row.Name}|{row.NormalizedName}|{row.Jobs ?? ""}|{row.Crafts ?? ""}"));
             }
 
             await MigrateAsync(connectionString, Fill);
@@ -202,8 +200,58 @@ public class CharactersBecomeSourceRoundTripTests
     private static string Literal(string? value) =>
         value is null ? "NULL" : "'" + value.Replace("'", "''") + "'";
 
-    // jsonb prints arrays with a space after each comma.
-    private static string Json(int[]? values) => values is null ? "" : "[" + string.Join(", ", values) + "]";
+    // One account's old columns (names, and job and craft levels as jsonb text), read with raw SQL:
+    // the app's model no longer maps them since Round5Contract.
+    private sealed record OldAccount(string Id, (string? Name, string? Jobs, string? Crafts)[] Slots);
+
+    private static async Task<List<OldAccount>> OldAccountColumnsAsync(string connectionString)
+    {
+        await using var c = new NpgsqlConnection(connectionString);
+        await c.OpenAsync();
+        await using var command = c.CreateCommand();
+        command.CommandText = """
+            SELECT "Id", "CharacterName", "JobLevels"::text, "CraftLevels"::text,
+                   "AltCharacterName1", "Alt1JobLevels"::text, "Alt1CraftLevels"::text,
+                   "AltCharacterName2", "Alt2JobLevels"::text, "Alt2CraftLevels"::text
+            FROM "AspNetUsers"
+            """;
+        var accounts = new List<OldAccount>();
+        await using var reader = await command.ExecuteReaderAsync();
+        string? Text(int column) => reader.IsDBNull(column) ? null : reader.GetString(column);
+        while (await reader.ReadAsync())
+        {
+            accounts.Add(new OldAccount(reader.GetString(0), new[]
+            {
+                (Text(1), Text(2), Text(3)),
+                (Text(4), Text(5), Text(6)),
+                (Text(7), Text(8), Text(9)),
+            }));
+        }
+        return accounts;
+    }
+
+    // CharacterSync.DesiredRows as the previous build had it, frozen: .NET Trim, not blank, at most 256
+    // characters (counted as Postgres counts them), lower-cased with ToLowerInvariant, and a repeat of
+    // an earlier slot's name left out.
+    private static List<(short Slot, string Name, string NormalizedName, string? Jobs, string? Crafts)> FrozenDesiredRows(OldAccount account)
+    {
+        var rows = new List<(short Slot, string Name, string NormalizedName, string? Jobs, string? Crafts)>(3);
+        for (short slot = 0; slot < account.Slots.Length; slot++)
+        {
+            var name = account.Slots[slot].Name?.Trim();
+            if (string.IsNullOrEmpty(name) || name.EnumerateRunes().Count() > 256)
+            {
+                continue;
+            }
+            var normalized = name.ToLowerInvariant();
+            if (rows.Any(row => string.Equals(row.NormalizedName, normalized, System.StringComparison.Ordinal)))
+            {
+                continue;
+            }
+            rows.Add((slot, name, normalized, account.Slots[slot].Jobs, account.Slots[slot].Crafts));
+        }
+        return rows;
+    }
 
     // Five accounts as the previous build could leave them (see the class comment), with memberships
     // in linkshell "LS". Accounts and Characters rows are written with raw SQL (the save hook would

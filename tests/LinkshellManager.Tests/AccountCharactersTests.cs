@@ -7,8 +7,8 @@ using Xunit;
 namespace LinkshellManager.Tests;
 
 // The Round 5 read helpers: an account's Characters rows (slot 0 the main, 1 and 2 the alts) and
-// the main's name for snapshot columns. The InMemory save copies the account columns into
-// Characters the same way Postgres does (CharacterSync), so seeding the columns is enough.
+// the main's name for snapshot columns. Seeded as Characters rows; the save hook trims names and
+// copies the main's onto the account.
 public class AccountCharactersTests
 {
     private static ApplicationDbContext NewDb() =>
@@ -20,13 +20,14 @@ public class AccountCharactersTests
     {
         var db = NewDb();
         db.Users.AddRange(
-            new AppUser
-            {
-                Id = "u1", UserName = "one", CharacterName = " Main ", AltCharacterName1 = "Altone", AltCharacterName2 = "Alttwo",
-                JobLevels = new[] { 75 }, Alt2JobLevels = new[] { 40 },
-            },
-            new AppUser { Id = "u2", UserName = "two", AltCharacterName2 = "Onlyalt" },
+            new AppUser { Id = "u1", UserName = "one" },
+            new AppUser { Id = "u2", UserName = "two" },
             new AppUser { Id = "u3", UserName = "three" });
+        TestCharacters.Add(db,
+            TestCharacters.Row("u1", Character.MainSlot, " Main ", jobLevels: new[] { 75 }),
+            TestCharacters.Row("u1", Character.Alt1Slot, "Altone"),
+            TestCharacters.Row("u1", Character.Alt2Slot, "Alttwo", jobLevels: new[] { 40 }),
+            TestCharacters.Row("u2", Character.Alt2Slot, "Onlyalt"));
         db.AppUserLinkshells.AddRange(
             new AppUserLinkshell { Id = 1, LinkshellId = 7, AppUserId = "u1" },
             new AppUserLinkshell { Id = 2, LinkshellId = 7, AppUserId = "u2" },

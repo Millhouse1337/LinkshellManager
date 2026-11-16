@@ -30,7 +30,7 @@ public class AuctionBidServiceTests
             db.Users.Add(new AppUser { Id = id, UserName = id, CharacterName = name });
             db.AppUserLinkshells.Add(new AppUserLinkshell
             {
-                LinkshellId = Ls, AppUserId = id, CharacterName = name, LinkshellDkp = 100,
+                LinkshellId = Ls, AppUserId = id, LinkshellDkp = 100,
             });
         }
 

@@ -14,7 +14,7 @@ using Xunit;
 namespace LinkshellManager.Tests;
 
 // A character's jobs live on its Characters row (written by CharacterWriter since Round 5), which
-// these tests read (the old account columns are not written since R5.6). The addon (POST
+// these tests read (the old account columns were dropped by Round5Contract). The addon (POST
 // character/jobs) may write the job levels of any of its token owner's OWN characters: the main, or
 // since Round 5 one of the two alts. Anybody else's character is refused with 403.
 // (This was MainCharacterJobsTests, when the addon could write the main only.)
@@ -29,9 +29,8 @@ public class AddonCharacterJobsTests
             .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
             .Options);
 
-    // Bob (account "bob", alts Bobalt and Bobtwo) is in both linkshells, spelled "Bob" on one roster
-    // and " bob " on the other. Carol (alt Carolalt) is in linkshell 1. Dave's account is only in the
-    // other linkshell.
+    // Bob (account "bob", alts Bobalt and Bobtwo) is in both linkshells. Carol (alt Carolalt) is in
+    // linkshell 1. Dave's account is only in the other linkshell.
     private static ApplicationDbContext Seeded()
     {
         var db = NewDb();
@@ -39,22 +38,20 @@ public class AddonCharacterJobsTests
             new Linkshell { Id = Ls, LinkshellName = "LS" },
             new Linkshell { Id = OtherLs, LinkshellName = "Other" });
         db.Users.AddRange(
-            new AppUser
-            {
-                Id = "bob", UserName = "bob", CharacterName = "Bob", AltCharacterName1 = "Bobalt", AltCharacterName2 = "Bobtwo",
-                JobLevels = new[] { 0, 1 }, Alt1JobLevels = new[] { 0, 11 }, Alt2JobLevels = new[] { 0, 22 },
-            },
-            new AppUser
-            {
-                Id = "carol", UserName = "carol", CharacterName = "Carol", AltCharacterName1 = "Carolalt",
-                JobLevels = new[] { 0, 50 }, Alt1JobLevels = new[] { 0, 51 },
-            },
+            new AppUser { Id = "bob", UserName = "bob", CharacterName = "Bob" },
+            new AppUser { Id = "carol", UserName = "carol", CharacterName = "Carol" },
             new AppUser { Id = "dave", UserName = "dave", CharacterName = "Dave" });
+        TestCharacters.Add(db,
+            TestCharacters.Row("bob", Character.MainSlot, "Bob", jobLevels: new[] { 0, 1 }),
+            TestCharacters.Row("bob", Character.Alt1Slot, "Bobalt", jobLevels: new[] { 0, 11 }),
+            TestCharacters.Row("bob", Character.Alt2Slot, "Bobtwo", jobLevels: new[] { 0, 22 }),
+            TestCharacters.Row("carol", Character.MainSlot, "Carol", jobLevels: new[] { 0, 50 }),
+            TestCharacters.Row("carol", Character.Alt1Slot, "Carolalt", jobLevels: new[] { 0, 51 }));
         db.AppUserLinkshells.AddRange(
-            new AppUserLinkshell { Id = 1, LinkshellId = Ls, AppUserId = "bob", CharacterName = "Bob" },
-            new AppUserLinkshell { Id = 2, LinkshellId = OtherLs, AppUserId = "bob", CharacterName = " bob " },
-            new AppUserLinkshell { Id = 3, LinkshellId = Ls, AppUserId = "carol", CharacterName = "Carol" },
-            new AppUserLinkshell { Id = 4, LinkshellId = OtherLs, AppUserId = "dave", CharacterName = "Dave" });
+            new AppUserLinkshell { Id = 1, LinkshellId = Ls, AppUserId = "bob" },
+            new AppUserLinkshell { Id = 2, LinkshellId = OtherLs, AppUserId = "bob" },
+            new AppUserLinkshell { Id = 3, LinkshellId = Ls, AppUserId = "carol" },
+            new AppUserLinkshell { Id = 4, LinkshellId = OtherLs, AppUserId = "dave" });
         db.SaveChanges();
         return db;
     }
@@ -180,8 +177,8 @@ public class AddonCharacterJobsTests
         Assert.Null(AccountCharacters.OwnCharacterSlot("Carolalt", owner, characters));
     }
 
-    // The account's own name is still the main when Characters does not have it. A roster name is
-    // not read any more (Round 5): it was only ever a copy of the main.
+    // The account's own name is still the main when Characters does not have it. A membership has
+    // no name of its own (Round5Contract dropped the roster name, only ever a copy of the main).
     [Fact]
     public void OwnCharacterSlot_FallsBackToTheAccountName_NotTheRosterNames()
     {
@@ -313,10 +310,13 @@ public class AddonCharacterJobsTests
         await using var db = NewDb();
         db.Linkshells.Add(new Linkshell { Id = Ls, LinkshellName = "LS" });
         db.Users.AddRange(
-            new AppUser { Id = "real", UserName = "real", CharacterName = "Bob", JobLevels = realHasJobs ? new[] { 0, 60 } : null },
-            new AppUser { Id = "ph", UserName = "ph", CharacterName = "Bob", IsPlaceholder = true,
-                JobLevels = new[] { 0, 30 }, StrongJobs = new[] { 0, 1 }, MeritJobs = new[] { "note" } });
-        db.AppUserLinkshells.Add(new AppUserLinkshell { Id = 10, LinkshellId = Ls, AppUserId = "ph", CharacterName = "Bob" });
+            new AppUser { Id = "real", UserName = "real", CharacterName = "Bob" },
+            new AppUser { Id = "ph", UserName = "ph", CharacterName = "Bob", IsPlaceholder = true });
+        TestCharacters.Add(db,
+            TestCharacters.Row("real", Character.MainSlot, "Bob", jobLevels: realHasJobs ? new[] { 0, 60 } : null),
+            TestCharacters.Row("ph", Character.MainSlot, "Bob",
+                jobLevels: new[] { 0, 30 }, strongJobs: new[] { 0, 1 }, meritJobs: new[] { "note" }));
+        db.AppUserLinkshells.Add(new AppUserLinkshell { Id = 10, LinkshellId = Ls, AppUserId = "ph" });
         db.SaveChanges();
 
         var result = await new PlaceholderClaimService(db, new UserMergeService(db))

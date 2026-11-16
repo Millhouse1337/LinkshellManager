@@ -52,7 +52,7 @@ public class PayNewlyRegisteredTests : IAsyncLifetime
             db.Users.Add(new AppUser { Id = "alice", UserName = "alice", CharacterName = "Alice" });
             db.AppUserLinkshells.Add(new AppUserLinkshell
             {
-                Linkshell = linkshell, AppUserId = "alice", CharacterName = "Alice", LinkshellDkp = 0,
+                Linkshell = linkshell, AppUserId = "alice", LinkshellDkp = 0,
             });
             var history = new EventHistory
             {
@@ -108,7 +108,7 @@ public class PayNewlyRegisteredTests : IAsyncLifetime
             db.Users.Add(new AppUser { Id = "carol", UserName = "carol", CharacterName = "Carol" });
             db.AppUserLinkshells.Add(new AppUserLinkshell
             {
-                LinkshellId = linkshellId, AppUserId = "carol", CharacterName = "Carol", LinkshellDkp = 0,
+                LinkshellId = linkshellId, AppUserId = "carol", LinkshellDkp = 0,
             });
             await db.SaveChangesAsync();
         }

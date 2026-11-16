@@ -51,8 +51,8 @@ public class PastEventCorrectionTests : IAsyncLifetime
             new AppUser { Id = "bob", UserName = "bob", CharacterName = "Bob" },
             new AppUser { Id = "alice", UserName = "alice", CharacterName = "Alice" });
         db.AppUserLinkshells.AddRange(
-            new AppUserLinkshell { LinkshellId = linkshell.Id, AppUserId = "bob", CharacterName = "Bob", LinkshellDkp = 0 },
-            new AppUserLinkshell { LinkshellId = linkshell.Id, AppUserId = "alice", CharacterName = "Alice", LinkshellDkp = 0 });
+            new AppUserLinkshell { LinkshellId = linkshell.Id, AppUserId = "bob", LinkshellDkp = 0 },
+            new AppUserLinkshell { LinkshellId = linkshell.Id, AppUserId = "alice", LinkshellDkp = 0 });
         var history = new EventHistory
         {
             LinkshellId = linkshell.Id, EventName = "Sky", EventType = "Sky", DkpPerHour = 10, Duration = 1, EndTime = Now,

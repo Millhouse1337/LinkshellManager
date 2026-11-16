@@ -21,7 +21,7 @@ namespace LinkshellManagerDiscordApp.Data
     // - an EXISTING account whose CharacterName was changed in a save that does not change its
     //   Characters rows, or whose old columns were changed in any save, gets the old values back, and
     //   a Warning is logged (use CharacterWriter);
-    // - a NEW account saved with names in its old columns and no Characters rows gets those names as
+    // - a NEW account saved with names in its old columns and no main Characters row gets those names as
     //   its Characters rows (CharacterSync.DesiredRows; names over CharacterWriter.MaxNameLength are
     //   left out), and a Warning is logged. Only tests still create accounts that way.
     public partial class ApplicationDbContext
@@ -184,8 +184,9 @@ namespace LinkshellManagerDiscordApp.Data
             }
         }
 
-        // A new account saved with names in its old columns and no Characters rows of its own in this
-        // save: those names become its rows (see the top of this file). Returns whether any were added.
+        // A new account saved with names in its old columns and no main (slot 0) Characters row of its
+        // own in this save: those names become its rows (see the top of this file), except in a slot the
+        // save already has a row for. Returns whether any were added.
         // ROUND5-DROP: reads the old alt, job and craft columns (R5.7: the main name part at most).
         private bool AdoptNewAccountsOldColumns(
             Dictionary<string, EntityEntry<AppUser>> userEntries, List<EntityEntry<Character>> characterEntries)
@@ -195,7 +196,8 @@ namespace LinkshellManagerDiscordApp.Data
             foreach (var (id, account) in userEntries.OrderBy(pair => pair.Key, StringComparer.Ordinal))
             {
                 if (account.State != EntityState.Added
-                    || characterEntries.Any(entry => string.Equals(entry.Entity.AppUserId, id, StringComparison.Ordinal)))
+                    || characterEntries.Any(entry => entry.Entity.Slot == Character.MainSlot
+                        && string.Equals(entry.Entity.AppUserId, id, StringComparison.Ordinal)))
                 {
                     continue;
                 }
@@ -206,6 +208,11 @@ namespace LinkshellManagerDiscordApp.Data
                 }
                 foreach (var row in rows)
                 {
+                    if (characterEntries.Any(entry => entry.Entity.Slot == row.Slot
+                        && string.Equals(entry.Entity.AppUserId, id, StringComparison.Ordinal)))
+                    {
+                        continue;
+                    }
                     if (CharacterWriter.IsTooLong(row.Name))
                     {
                         LogAccountNames("Characters: new account {AppUserId} has a name in slot {Slot} longer than {MaxLength} characters; it is left out.",

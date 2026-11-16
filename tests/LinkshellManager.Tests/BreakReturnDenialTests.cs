@@ -172,7 +172,6 @@ public class BreakReturnDenialTests
         {
             AppUserId = TodCallers.User,
             LinkshellId = TodCallers.LinkshellId,
-            CharacterName = "Tester",
             Rank = LinkshellRanks.Leader,
         });
         db.Events.Add(TimedEvent());

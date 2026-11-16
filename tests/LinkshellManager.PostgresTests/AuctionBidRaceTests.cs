@@ -42,7 +42,7 @@ public class AuctionBidRaceTests : IAsyncLifetime
             db.Users.Add(new AppUser { Id = id, UserName = id, CharacterName = name });
             db.AppUserLinkshells.Add(new AppUserLinkshell
             {
-                LinkshellId = linkshell.Id, AppUserId = id, CharacterName = name, LinkshellDkp = dkp,
+                LinkshellId = linkshell.Id, AppUserId = id, LinkshellDkp = dkp,
             });
         }
 

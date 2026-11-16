@@ -67,7 +67,7 @@ public class PlaceholderDiscordPromotionTests
         db.Users.Add(new AppUser { Id = "ph", UserName = "placeholder-ph", CharacterName = "Bobalt", IsPlaceholder = true });
         db.AppUserLinkshells.Add(new AppUserLinkshell
         {
-            Id = 1, LinkshellId = 1, AppUserId = "ph", CharacterName = "Bobalt", LinkshellDkp = 100,
+            Id = 1, LinkshellId = 1, AppUserId = "ph", LinkshellDkp = 100,
             DiscordUserId = "42", DiscordIdConfirmed = confirmed,
         });
         db.SaveChanges();

@@ -82,14 +82,14 @@ public class AuctionCloseRaceTests : IAsyncLifetime
         db.Users.Add(new AppUser { Id = Officer, UserName = Officer, CharacterName = "Boss" });
         db.AppUserLinkshells.Add(new AppUserLinkshell
         {
-            LinkshellId = linkshell.Id, AppUserId = Officer, CharacterName = "Boss", Rank = LinkshellRanks.Leader, LinkshellDkp = 0,
+            LinkshellId = linkshell.Id, AppUserId = Officer, Rank = LinkshellRanks.Leader, LinkshellDkp = 0,
         });
         foreach (var (id, name) in new[] { ("bob", "Bob"), ("carol", "Carol") })
         {
             db.Users.Add(new AppUser { Id = id, UserName = id, CharacterName = name });
             db.AppUserLinkshells.Add(new AppUserLinkshell
             {
-                LinkshellId = linkshell.Id, AppUserId = id, CharacterName = name, LinkshellDkp = 100,
+                LinkshellId = linkshell.Id, AppUserId = id, LinkshellDkp = 100,
             });
         }
         var auction = new Auction

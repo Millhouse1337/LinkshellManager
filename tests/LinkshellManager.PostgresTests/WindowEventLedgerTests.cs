@@ -46,11 +46,11 @@ public class WindowEventLedgerTests : IAsyncLifetime
             db.Linkshells.Add(linkshell);
             db.Users.Add(new AppUser
             {
-                Id = "user-alpha", UserName = "alpha", CharacterName = "Alpha", AltCharacterName1 = "Alphalt",
-            });
+                Id = "user-alpha", UserName = "alpha", CharacterName = "Alpha",
+            }.WithAlts("Alphalt"));
             db.AppUserLinkshells.Add(new AppUserLinkshell
             {
-                Linkshell = linkshell, AppUserId = "user-alpha", CharacterName = "Alpha", LinkshellDkp = 0,
+                Linkshell = linkshell, AppUserId = "user-alpha", LinkshellDkp = 0,
             });
             var card = new WindowEvent
             {

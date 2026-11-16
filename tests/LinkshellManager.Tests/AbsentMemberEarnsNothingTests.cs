@@ -137,8 +137,8 @@ public class AbsentMemberEarnsNothingTests
         db.Linkshells.Add(new Linkshell { Id = Ls, LinkshellName = "LS", LootStructure = "Dkp" });
         db.Users.Add(new AppUser { Id = "present", UserName = "present" });
         db.Users.Add(new AppUser { Id = "absent", UserName = "absent" });
-        db.AppUserLinkshells.Add(new AppUserLinkshell { Id = 1, LinkshellId = Ls, AppUserId = "present", CharacterName = "Here" });
-        db.AppUserLinkshells.Add(new AppUserLinkshell { Id = 2, LinkshellId = Ls, AppUserId = "absent", CharacterName = "Gone" });
+        db.AppUserLinkshells.Add(new AppUserLinkshell { Id = 1, LinkshellId = Ls, AppUserId = "present" });
+        db.AppUserLinkshells.Add(new AppUserLinkshell { Id = 2, LinkshellId = Ls, AppUserId = "absent" });
 
         var start = DateTime.UtcNow.AddHours(-2);
         db.Events.Add(new Event

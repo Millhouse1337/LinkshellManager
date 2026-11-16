@@ -48,11 +48,11 @@ public class PastEventCampArchiveReadOnlyTests
         db.Users.Add(new AppUser { Id = "bob", UserName = "bob" });
         db.AppUserLinkshells.Add(new AppUserLinkshell
         {
-            Id = 1, LinkshellId = LinkshellId, AppUserId = "alice", CharacterName = "Alice", LinkshellDkp = 20
+            Id = 1, LinkshellId = LinkshellId, AppUserId = "alice", LinkshellDkp = 20
         });
         db.AppUserLinkshells.Add(new AppUserLinkshell
         {
-            Id = 2, LinkshellId = LinkshellId, AppUserId = "bob", CharacterName = "Bob", LinkshellDkp = 0
+            Id = 2, LinkshellId = LinkshellId, AppUserId = "bob", LinkshellDkp = 0
         });
 
         foreach (var (id, name, type) in new[] { (CampHistoryId, "faff", "HNM"), (TimedHistoryId, "Sky", "Sky") })

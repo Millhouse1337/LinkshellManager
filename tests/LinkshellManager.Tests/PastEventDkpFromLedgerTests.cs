@@ -75,9 +75,9 @@ public class PastEventDkpFromLedgerTests
             new AppUser { Id = "alice", UserName = "alice", CharacterName = "Alice" },
             new AppUser { Id = "bob", UserName = "bob", CharacterName = "Bob" });
         db.AppUserLinkshells.AddRange(
-            new AppUserLinkshell { Id = 1, LinkshellId = Ls, AppUserId = Officer, CharacterName = "Boss", Rank = LinkshellRanks.Leader, LinkshellDkp = 0 },
-            new AppUserLinkshell { Id = 2, LinkshellId = Ls, AppUserId = "alice", CharacterName = "Alice", Rank = LinkshellRanks.Member, LinkshellDkp = 0 },
-            new AppUserLinkshell { Id = 3, LinkshellId = Ls, AppUserId = "bob", CharacterName = "Bob", Rank = LinkshellRanks.Member, LinkshellDkp = 0 });
+            new AppUserLinkshell { Id = 1, LinkshellId = Ls, AppUserId = Officer, Rank = LinkshellRanks.Leader, LinkshellDkp = 0 },
+            new AppUserLinkshell { Id = 2, LinkshellId = Ls, AppUserId = "alice", Rank = LinkshellRanks.Member, LinkshellDkp = 0 },
+            new AppUserLinkshell { Id = 3, LinkshellId = Ls, AppUserId = "bob", Rank = LinkshellRanks.Member, LinkshellDkp = 0 });
         db.EventHistories.Add(new EventHistory
         {
             Id = TimedHistoryId, LinkshellId = Ls, EventName = "Sky", EventType = "Sky", DkpPerHour = 10,
@@ -228,7 +228,7 @@ public class PastEventDkpFromLedgerTests
         async Task<DkpLedgerEntry> PayAsync(AppUserLinkshell member, double amount)
         {
             var row = await writer.AppendAsync(member, "SnapshotEarned", amount, DateTime.UtcNow, DkpPoolRef.Derived("HNM"),
-                new DkpEntryContext(CharacterName: member.CharacterName, EventType: "HNM",
+                new DkpEntryContext(CharacterName: db.Users.Find(member.AppUserId)!.CharacterName, EventType: "HNM",
                     EventHistoryId: CampHistoryId, SourceWindowEventId: 90), CancellationToken.None);
             await db.SaveChangesAsync();
             return row!;

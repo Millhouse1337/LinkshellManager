@@ -53,7 +53,6 @@ internal static class TodCallers
         {
             AppUserId = User,
             LinkshellId = LinkshellId,
-            CharacterName = "Tester",
             Rank = LinkshellRanks.Member,
         });
         await db.SaveChangesAsync();

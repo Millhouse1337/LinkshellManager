@@ -74,7 +74,7 @@ public class PostedCardCaptureEditTests
         db.Users.Add(new AppUser { Id = Officer, UserName = Officer, CharacterName = "Boss" });
         db.AppUserLinkshells.Add(new AppUserLinkshell
         {
-            LinkshellId = Ls, AppUserId = Officer, CharacterName = "Boss", Rank = LinkshellRanks.Leader,
+            LinkshellId = Ls, AppUserId = Officer, Rank = LinkshellRanks.Leader,
         });
         db.WindowEvents.Add(new WindowEvent
         {

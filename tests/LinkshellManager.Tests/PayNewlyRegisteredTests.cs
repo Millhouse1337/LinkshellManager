@@ -52,7 +52,7 @@ public class PayNewlyRegisteredTests
         db.Users.Add(new AppUser { Id = AliceId, UserName = "alice", CharacterName = "Alice" });
         db.AppUserLinkshells.Add(new AppUserLinkshell
         {
-            Id = 1, LinkshellId = LinkshellId, AppUserId = AliceId, CharacterName = "Alice", LinkshellDkp = 0,
+            Id = 1, LinkshellId = LinkshellId, AppUserId = AliceId, LinkshellDkp = 0,
         });
 
         if (camp)
@@ -117,7 +117,7 @@ public class PayNewlyRegisteredTests
         db.Users.Add(new AppUser { Id = CarolId, UserName = "carol", CharacterName = "Carol" });
         db.AppUserLinkshells.Add(new AppUserLinkshell
         {
-            Id = 2, LinkshellId = LinkshellId, AppUserId = CarolId, CharacterName = "Carol", LinkshellDkp = 0,
+            Id = 2, LinkshellId = LinkshellId, AppUserId = CarolId, LinkshellDkp = 0,
         });
         await db.SaveChangesAsync();
     }
@@ -271,11 +271,11 @@ public class PayNewlyRegisteredTests
 
         db.Users.Add(new AppUser
         {
-            Id = CarolId, UserName = "carol", CharacterName = "Carol", AltCharacterName1 = "Carolalt",
-        });
+            Id = CarolId, UserName = "carol", CharacterName = "Carol",
+        }.WithAlts("Carolalt"));
         db.AppUserLinkshells.Add(new AppUserLinkshell
         {
-            Id = 2, LinkshellId = LinkshellId, AppUserId = CarolId, CharacterName = "Carol", LinkshellDkp = 0,
+            Id = 2, LinkshellId = LinkshellId, AppUserId = CarolId, LinkshellDkp = 0,
         });
         await db.SaveChangesAsync();
         // Listed once, by her main name, though the card has her alt.
@@ -314,7 +314,7 @@ public class PayNewlyRegisteredTests
         db.Users.Add(new AppUser { Id = "user-dave", UserName = "dave", CharacterName = "Dave" });
         db.AppUserLinkshells.Add(new AppUserLinkshell
         {
-            Id = 3, LinkshellId = LinkshellId, AppUserId = "user-dave", CharacterName = "Dave", LinkshellDkp = 0,
+            Id = 3, LinkshellId = LinkshellId, AppUserId = "user-dave", LinkshellDkp = 0,
         });
         await db.SaveChangesAsync();
 

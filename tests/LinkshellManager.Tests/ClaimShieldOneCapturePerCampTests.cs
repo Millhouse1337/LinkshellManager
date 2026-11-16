@@ -45,12 +45,11 @@ public class ClaimShieldOneCapturePerCampTests
                      ("user-d", "Delta", "Deltalt"),
                  })
         {
-            db.Users.Add(new AppUser { Id = id, UserName = character, CharacterName = character, AltCharacterName1 = alt });
+            db.Users.Add(new AppUser { Id = id, UserName = character, CharacterName = character }.WithAlts(alt));
             db.AppUserLinkshells.Add(new AppUserLinkshell
             {
                 AppUserId = id,
                 LinkshellId = LinkshellId,
-                CharacterName = character,
                 Rank = LinkshellRanks.Member,
             });
         }

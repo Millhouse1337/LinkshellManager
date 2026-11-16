@@ -38,11 +38,11 @@ public sealed class ApiSignInPipelineTests : IClassFixture<ApiSignInPipelineTest
                 });
                 db.AppUserLinkshells.Add(new AppUserLinkshell
                 {
-                    AppUserId = MemberId, LinkshellId = OpenLinkshellId, CharacterName = "Member", Rank = LinkshellRanks.Leader, Status = "Active",
+                    AppUserId = MemberId, LinkshellId = OpenLinkshellId, Rank = LinkshellRanks.Leader, Status = "Active",
                 });
                 db.AppUserLinkshells.Add(new AppUserLinkshell
                 {
-                    AppUserId = MemberId, LinkshellId = LockedLinkshellId, CharacterName = "Member", Rank = LinkshellRanks.Leader, Status = "Active",
+                    AppUserId = MemberId, LinkshellId = LockedLinkshellId, Rank = LinkshellRanks.Leader, Status = "Active",
                 });
                 db.AddonApiTokens.Add(new AddonApiToken
                 {

@@ -103,7 +103,7 @@ public class DataAdminCatalogTests
         }
 
         // The sweep above is only meaningful if it actually saw the known hazards.
-        Assert.Contains(typeof(AppUser).GetProperties(), p => p.Name == nameof(AppUser.Alt1JobLevels));
+        Assert.Contains(typeof(Character).GetProperties(), p => p.Name == nameof(Character.JobLevels));
         Assert.Contains(typeof(JobRating).GetProperties(), p => p.PropertyType.IsArray);
         Assert.Contains(typeof(LinkshellBanner).GetProperties(), p => p.PropertyType == typeof(byte[]));
     }

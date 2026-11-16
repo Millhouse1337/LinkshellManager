@@ -67,7 +67,7 @@ public class PastEventRowsPinnedTests
             seed.Users.Add(new AppUser { Id = "alice", UserName = "alice", CharacterName = "Alice" });
             seed.AppUserLinkshells.Add(new AppUserLinkshell
             {
-                Id = 2, LinkshellId = Ls, AppUserId = "alice", CharacterName = "Alice", Rank = LinkshellRanks.Member, LinkshellDkp = 0,
+                Id = 2, LinkshellId = Ls, AppUserId = "alice", Rank = LinkshellRanks.Member, LinkshellDkp = 0,
             });
             SeedPartySetups(seed, TimedEventId);
             seed.Events.Add(new Event
@@ -257,8 +257,8 @@ public class PastEventRowsPinnedTests
             new AppUser { Id = AlphaId, UserName = "alpha", CharacterName = "Alpha" },
             new AppUser { Id = BetaId, UserName = "beta", CharacterName = "Beta" });
         db.AppUserLinkshells.AddRange(
-            new AppUserLinkshell { Id = 1, LinkshellId = Ls, AppUserId = AlphaId, CharacterName = "Alpha" },
-            new AppUserLinkshell { Id = 2, LinkshellId = Ls, AppUserId = BetaId, CharacterName = "Beta" });
+            new AppUserLinkshell { Id = 1, LinkshellId = Ls, AppUserId = AlphaId },
+            new AppUserLinkshell { Id = 2, LinkshellId = Ls, AppUserId = BetaId });
         db.AppUserEvents.AddRange(
             new AppUserEvent
             {
@@ -386,7 +386,7 @@ public class PastEventRowsPinnedTests
     {
         using var db = await SeedCampAsync(commenced: true);
         db.Users.Add(new AppUser { Id = "user-gamma", UserName = "gamma", CharacterName = "Gamma" });
-        db.AppUserLinkshells.Add(new AppUserLinkshell { Id = 3, LinkshellId = Ls, AppUserId = "user-gamma", CharacterName = "Gamma" });
+        db.AppUserLinkshells.Add(new AppUserLinkshell { Id = 3, LinkshellId = Ls, AppUserId = "user-gamma" });
         await db.SaveChangesAsync();
         var windowEvent = await EndCampAsync(db);
         var endedHistory = await db.EventHistories.AsNoTracking().SingleAsync();
@@ -480,7 +480,7 @@ public class PastEventRowsPinnedTests
         db.Users.Add(new AppUser { Id = "bob", UserName = "bob", CharacterName = "Bob" });
         db.AppUserLinkshells.Add(new AppUserLinkshell
         {
-            Id = 2, LinkshellId = Ls, AppUserId = "bob", CharacterName = "Bobby", LinkshellDkp = 0,
+            Id = 2, LinkshellId = Ls, AppUserId = "bob", LinkshellDkp = 0,
         });
         db.EventHistories.Add(new EventHistory
         {
@@ -498,7 +498,7 @@ public class PastEventRowsPinnedTests
         var row = await db.AppUserEventHistories.AsNoTracking().SingleAsync();
         Assert.Equal(50, row.EventHistoryId);
         Assert.Equal("bob", row.AppUserId);
-        // The account's main, not the roster name "Bobby": Round 5 reads names from the account.
+        // The account's main: Round 5 reads names from the account (a membership has no name).
         Assert.Equal("Bob", row.CharacterName);
         Assert.Equal("SAM", row.JobName);
         Assert.Null(row.SubJobName);

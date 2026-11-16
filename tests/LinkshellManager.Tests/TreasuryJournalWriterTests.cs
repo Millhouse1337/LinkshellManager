@@ -87,8 +87,8 @@ public class TreasuryJournalWriterTests
     public async Task Draft_FillsTheHolderAccountFromTheName(string holderName, string? expectedId)
     {
         using var db = await SeededContextAsync();
-        db.Users.Add(new AppUser { Id = "user-9", UserName = "edi", CharacterName = "Edicius", AltCharacterName1 = "Edimule" });
-        db.AppUserLinkshells.Add(new AppUserLinkshell { Id = 1, LinkshellId = Linkshell, AppUserId = "user-9", CharacterName = "Edicius" });
+        db.Users.Add(new AppUser { Id = "user-9", UserName = "edi", CharacterName = "Edicius" }.WithAlts("Edimule"));
+        db.AppUserLinkshells.Add(new AppUserLinkshell { Id = 1, LinkshellId = Linkshell, AppUserId = "user-9" });
         await db.SaveChangesAsync();
         var writer = NewWriter(db);
 

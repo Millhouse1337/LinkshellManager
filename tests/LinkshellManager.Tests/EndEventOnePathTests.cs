@@ -88,16 +88,16 @@ public class EndEventOnePathTests
         });
         db.Users.AddRange(
             new AppUser { Id = Officer, UserName = Officer, CharacterName = "Boss" },
-            new AppUser { Id = "alice", UserName = "alice", CharacterName = "Alice", AltCharacterName1 = "Alicealt" },
+            new AppUser { Id = "alice", UserName = "alice", CharacterName = "Alice" }.WithAlts("Alicealt"),
             new AppUser { Id = "bob", UserName = "bob", CharacterName = "Bob" },
             new AppUser { Id = "carol", UserName = "carol", CharacterName = "Carol" },
             new AppUser { Id = "dave", UserName = "dave", CharacterName = "Dave" });
         db.AppUserLinkshells.AddRange(
-            new AppUserLinkshell { Id = 1, LinkshellId = Ls, AppUserId = Officer, CharacterName = "Boss", Rank = LinkshellRanks.Leader, LinkshellDkp = 0 },
-            new AppUserLinkshell { Id = 2, LinkshellId = Ls, AppUserId = "alice", CharacterName = "Alice", Rank = LinkshellRanks.Member, LinkshellDkp = 100 },
-            new AppUserLinkshell { Id = 3, LinkshellId = Ls, AppUserId = "bob", CharacterName = "Bob", Rank = LinkshellRanks.Member, LinkshellDkp = 100 },
-            new AppUserLinkshell { Id = 4, LinkshellId = Ls, AppUserId = "carol", CharacterName = "Carol", Rank = LinkshellRanks.Member, LinkshellDkp = 100 },
-            new AppUserLinkshell { Id = 5, LinkshellId = Ls, AppUserId = "dave", CharacterName = "Dave", Rank = LinkshellRanks.Member, LinkshellDkp = 100 });
+            new AppUserLinkshell { Id = 1, LinkshellId = Ls, AppUserId = Officer, Rank = LinkshellRanks.Leader, LinkshellDkp = 0 },
+            new AppUserLinkshell { Id = 2, LinkshellId = Ls, AppUserId = "alice", Rank = LinkshellRanks.Member, LinkshellDkp = 100 },
+            new AppUserLinkshell { Id = 3, LinkshellId = Ls, AppUserId = "bob", Rank = LinkshellRanks.Member, LinkshellDkp = 100 },
+            new AppUserLinkshell { Id = 4, LinkshellId = Ls, AppUserId = "carol", Rank = LinkshellRanks.Member, LinkshellDkp = 100 },
+            new AppUserLinkshell { Id = 5, LinkshellId = Ls, AppUserId = "dave", Rank = LinkshellRanks.Member, LinkshellDkp = 100 });
         // Opening balances go through the ledger, as in the app, so Hybrid reads them from it.
         foreach (var id in new[] { "alice", "bob", "carol", "dave" })
         {

@@ -31,7 +31,7 @@ public class DkpSheetServiceTests
         db.Users.Add(new AppUser { Id = "u1", UserName = "alice", CharacterName = "Alice" });
         db.AppUserLinkshells.Add(new AppUserLinkshell
         {
-            Id = 1, LinkshellId = 1, AppUserId = "u1", CharacterName = "Alice", LinkshellDkp = 100
+            Id = 1, LinkshellId = 1, AppUserId = "u1", LinkshellDkp = 100
         });
 
         // A live (commenced, not-yet-ended) Dkp event where Alice won 30 DKP of loot that
@@ -64,7 +64,7 @@ public class DkpSheetServiceTests
         db.Users.Add(new AppUser { Id = "u1", UserName = "bob", CharacterName = "Bob" });
         db.AppUserLinkshells.Add(new AppUserLinkshell
         {
-            Id = 1, LinkshellId = 1, AppUserId = "u1", CharacterName = "Bob", LinkshellDkp = 42
+            Id = 1, LinkshellId = 1, AppUserId = "u1", LinkshellDkp = 42
         });
         await db.SaveChangesAsync();
 

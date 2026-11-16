@@ -44,7 +44,7 @@ public class EventHistoryWindowArchiveTests
         db.Users.Add(new AppUser { Id = "u1", UserName = "edicius" });
         db.AppUserLinkshells.Add(new AppUserLinkshell
         {
-            Id = 1, LinkshellId = Ls, AppUserId = "u1", CharacterName = "Edicius"
+            Id = 1, LinkshellId = Ls, AppUserId = "u1"
         });
 
         var camp = new Event
@@ -169,7 +169,7 @@ public class EventHistoryWindowArchiveTests
         db.Users.Add(new AppUser { Id = "u1", UserName = "edicius" });
         db.AppUserLinkshells.Add(new AppUserLinkshell
         {
-            Id = 1, LinkshellId = Ls, AppUserId = "u1", CharacterName = "Edicius"
+            Id = 1, LinkshellId = Ls, AppUserId = "u1"
         });
         var start = new DateTime(2026, 8, 18, 1, 0, 0, DateTimeKind.Utc);
         db.Events.Add(new Event

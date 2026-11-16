@@ -53,8 +53,8 @@ public class EndCampLootRaceTests : IAsyncLifetime
             new AppUser { Id = Officer, UserName = Officer, CharacterName = "Boss" },
             new AppUser { Id = "alice", UserName = "alice", CharacterName = "Alice" });
         db.AppUserLinkshells.AddRange(
-            new AppUserLinkshell { LinkshellId = linkshell.Id, AppUserId = Officer, CharacterName = "Boss", Rank = LinkshellRanks.Leader, LinkshellDkp = 0 },
-            new AppUserLinkshell { LinkshellId = linkshell.Id, AppUserId = "alice", CharacterName = "Alice", LinkshellDkp = 100 });
+            new AppUserLinkshell { LinkshellId = linkshell.Id, AppUserId = Officer, Rank = LinkshellRanks.Leader, LinkshellDkp = 0 },
+            new AppUserLinkshell { LinkshellId = linkshell.Id, AppUserId = "alice", LinkshellDkp = 100 });
         db.HnmRecurringBoards.Add(new HnmRecurringBoard { LinkshellId = linkshell.Id, MonsterName = "Fafnir", Enabled = true });
         var board = new Event
         {

@@ -37,7 +37,7 @@ public class PastEventAuditCorrectionTests
     {
         db.Linkshells.Add(new Linkshell { Id = Ls, LinkshellName = "LS" });
         db.Users.Add(new AppUser { Id = "u2", UserName = "bob", CharacterName = "Bob" });
-        var bob = new AppUserLinkshell { Id = 2, LinkshellId = Ls, AppUserId = "u2", CharacterName = "Bob", LinkshellDkp = 0 };
+        var bob = new AppUserLinkshell { Id = 2, LinkshellId = Ls, AppUserId = "u2", LinkshellDkp = 0 };
         db.AppUserLinkshells.Add(bob);
         db.EventHistories.Add(new EventHistory
         {

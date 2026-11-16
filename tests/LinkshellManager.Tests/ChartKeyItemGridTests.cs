@@ -228,12 +228,12 @@ public class ChartKeyItemGridTests
         var db = NewInMemoryContext();
         db.AppUserLinkshells.Add(new AppUserLinkshell
         {
-            Id = 1, LinkshellId = 1, AppUserId = "user-1", CharacterName = "Aeris", Rank = "Member",
+            Id = 1, LinkshellId = 1, AppUserId = "user-1", Rank = "Member",
             AppUser = new AppUser { Id = "user-1", UserName = "user-1", CharacterName = "Aeris" },
         });
         db.AppUserLinkshells.Add(new AppUserLinkshell
         {
-            Id = 2, LinkshellId = 99, AppUserId = "user-2", CharacterName = "Stranger", Rank = "Member",
+            Id = 2, LinkshellId = 99, AppUserId = "user-2", Rank = "Member",
             AppUser = new AppUser { Id = "user-2", UserName = "user-2", CharacterName = "Stranger" },
         });
         db.SaveChanges();
@@ -291,7 +291,7 @@ public class ChartKeyItemGridTests
         using var db = WithRoster();
         db.AppUserLinkshells.Add(new AppUserLinkshell
         {
-            Id = 3, LinkshellId = 1, AppUserId = null, CharacterName = "Sheet", Rank = "Member",
+            Id = 3, LinkshellId = 1, AppUserId = null, Rank = "Member",
         });
         await db.SaveChangesAsync();
 

@@ -85,7 +85,7 @@ public class CharacterNameValidatorTests
     public async Task AnOldRepeatInsideTheAccount_IsRefused_UntilTheAltIsFixed()
     {
         using var db = NewInMemoryContext();
-        var user = new AppUser { Id = "user-1", UserName = "tester", CharacterName = "Twin", AltCharacterName1 = "Twin" };
+        var user = new AppUser { Id = "user-1", UserName = "tester", CharacterName = "Twin" };
         var validator = new CharacterNameValidator(db);
 
         var (ok, error) = await validator.ValidateAsync(user, "Twin", "twin", "Third");
@@ -122,20 +122,24 @@ public class CharacterNameValidatorTests
     {
         var db = NewInMemoryContext();
         db.Linkshells.AddRange(new Linkshell { Id = Ls, LinkshellName = "LS" }, new Linkshell { Id = OtherLs, LinkshellName = "Other" });
-        var user = new AppUser { Id = "me", UserName = "me", CharacterName = "Mine", AltCharacterName1 = "Bob" };
+        var user = new AppUser { Id = "me", UserName = "me", CharacterName = "Mine" };
         db.Users.AddRange(
             user,
-            new AppUser { Id = "bob", UserName = "bob", CharacterName = "Bob", AltCharacterName1 = "Bobalt" },
-            new AppUser { Id = "ann", UserName = "ann", CharacterName = "Ann", AltCharacterName2 = " Annalt " },
-            new AppUser { Id = "pat", UserName = "pat", CharacterName = "Pat", AltCharacterName1 = "Patalt", IsPlaceholder = true },
+            new AppUser { Id = "bob", UserName = "bob", CharacterName = "Bob" },
+            new AppUser { Id = "ann", UserName = "ann", CharacterName = "Ann" },
+            new AppUser { Id = "pat", UserName = "pat", CharacterName = "Pat", IsPlaceholder = true },
             new AppUser { Id = "zed", UserName = "zed", CharacterName = "Zed" });
+        TestCharacters.AddAlts(db, "me", "Bob");
+        TestCharacters.AddAlts(db, "bob", "Bobalt");
+        TestCharacters.AddAlts(db, "ann", null, " Annalt ");
+        TestCharacters.AddAlts(db, "pat", "Patalt");
         db.AppUserLinkshells.AddRange(
-            new AppUserLinkshell { LinkshellId = Ls, AppUserId = "me", CharacterName = "Mine" },
-            new AppUserLinkshell { LinkshellId = Ls, AppUserId = "bob", CharacterName = "Bob" },
-            new AppUserLinkshell { LinkshellId = Ls, AppUserId = "ann", CharacterName = "Annie" },
-            new AppUserLinkshell { LinkshellId = Ls, AppUserId = "pat", CharacterName = "Pat" },
-            new AppUserLinkshell { LinkshellId = Ls, CharacterName = "Nobody" },
-            new AppUserLinkshell { LinkshellId = OtherLs, AppUserId = "zed", CharacterName = "Zed" });
+            new AppUserLinkshell { LinkshellId = Ls, AppUserId = "me" },
+            new AppUserLinkshell { LinkshellId = Ls, AppUserId = "bob" },
+            new AppUserLinkshell { LinkshellId = Ls, AppUserId = "ann" },
+            new AppUserLinkshell { LinkshellId = Ls, AppUserId = "pat" },
+            new AppUserLinkshell { LinkshellId = Ls },
+            new AppUserLinkshell { LinkshellId = OtherLs, AppUserId = "zed" });
         await db.SaveChangesAsync();
         return (db, user);
     }
@@ -159,8 +163,8 @@ public class CharacterNameValidatorTests
     [Theory]
     [InlineData("Pat", "Bob", "Patalt")] // a placeholder's names: the player claims them later
     [InlineData("Zed", "Bob", null)]     // a member of a linkshell this account is not in
-    [InlineData("Nobody", "Bob", null)]  // a roster name with no account behind it
-    [InlineData("ANNIE", "Bob", null)]   // Ann's roster name "Annie": not her main, and roster names are not read (Round 5)
+    [InlineData("Nobody", "Bob", null)]  // a name nobody has (the membership with no account has no name)
+    [InlineData("ANNIE", "Bob", null)]   // close to Ann's main, but not one of her names
     [InlineData("Mine", "BOB", null)]    // the alt it already shares with Bob, in other capitals
     [InlineData("Bob", "Mine", null)]    // main and alt swapped: no new name
     [InlineData("Mine", "Bob", "Fresh")] // a name nobody uses

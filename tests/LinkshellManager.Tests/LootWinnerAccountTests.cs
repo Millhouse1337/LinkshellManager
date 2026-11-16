@@ -36,8 +36,8 @@ public class LootWinnerAccountTests
         db.Linkshells.Add(new Linkshell { Id = Ls, LinkshellName = "LS", LootStructure = "Dkp" });
         db.Users.Add(new AppUser { Id = "u1", UserName = "one", CharacterName = "Newname" });
         db.Users.Add(new AppUser { Id = "u2", UserName = "two", CharacterName = "Oldname" });
-        db.AppUserLinkshells.Add(new AppUserLinkshell { Id = 1, LinkshellId = Ls, AppUserId = "u1", CharacterName = "Newname", LinkshellDkp = 100 });
-        db.AppUserLinkshells.Add(new AppUserLinkshell { Id = 2, LinkshellId = Ls, AppUserId = "u2", CharacterName = "Oldname", LinkshellDkp = 100 });
+        db.AppUserLinkshells.Add(new AppUserLinkshell { Id = 1, LinkshellId = Ls, AppUserId = "u1", LinkshellDkp = 100 });
+        db.AppUserLinkshells.Add(new AppUserLinkshell { Id = 2, LinkshellId = Ls, AppUserId = "u2", LinkshellDkp = 100 });
     }
 
     private static double Dkp(ApplicationDbContext db, string appUserId) =>
@@ -76,7 +76,7 @@ public class LootWinnerAccountTests
     {
         var namesake = new AppUserLinkshell
         {
-            Id = 2, LinkshellId = Ls, AppUserId = "u2", CharacterName = "Oldname",
+            Id = 2, LinkshellId = Ls, AppUserId = "u2",
             AppUser = new AppUser { Id = "u2", CharacterName = "Oldname" },
         };
         var loot = new EventLootDetail { ItemWinner = "Oldname", ItemWinnerAppUserId = "gone" };
@@ -95,7 +95,7 @@ public class LootWinnerAccountTests
     {
         var member = new AppUserLinkshell
         {
-            Id = 2, LinkshellId = Ls, AppUserId = "u2", CharacterName = "Oldname",
+            Id = 2, LinkshellId = Ls, AppUserId = "u2",
             AppUser = new AppUser { Id = "u2", CharacterName = "Oldname" },
         };
 

@@ -32,7 +32,7 @@ public class PlaceholderClaimRequestTests : IAsyncLifetime
         db.Linkshells.Add(linkshell);
         db.Users.Add(new AppUser { Id = "real", UserName = "real", CharacterName = "Bobalt" });
         db.Users.Add(new AppUser { Id = "ph", UserName = "ph", CharacterName = "Bobalt", IsPlaceholder = true });
-        db.AppUserLinkshells.Add(new AppUserLinkshell { Linkshell = linkshell, AppUserId = "ph", CharacterName = "Bobalt" });
+        db.AppUserLinkshells.Add(new AppUserLinkshell { Linkshell = linkshell, AppUserId = "ph" });
         await db.SaveChangesAsync();
         return linkshell.Id;
     }

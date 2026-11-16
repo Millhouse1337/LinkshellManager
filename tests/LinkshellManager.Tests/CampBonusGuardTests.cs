@@ -39,7 +39,7 @@ public class CampBonusGuardTests
         db.Users.Add(new AppUser { Id = User, UserName = User, CharacterName = "Officer" });
         db.AppUserLinkshells.Add(new AppUserLinkshell
         {
-            AppUserId = User, LinkshellId = Ls, CharacterName = "Officer", Rank = LinkshellRanks.Leader,
+            AppUserId = User, LinkshellId = Ls, Rank = LinkshellRanks.Leader,
         });
         var now = DateTime.UtcNow;
         db.Events.Add(new Event

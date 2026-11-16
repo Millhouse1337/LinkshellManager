@@ -37,7 +37,7 @@ public class LootAfterEndCampTests : IAsyncLifetime
             await db.SaveChangesAsync();
             db.AppUserLinkshells.Add(new AppUserLinkshell
             {
-                LinkshellId = ls.Id, AppUserId = "alice", CharacterName = "Alice", LinkshellDkp = 100,
+                LinkshellId = ls.Id, AppUserId = "alice", LinkshellDkp = 100,
             });
             // Parked by End Camp, and a running camp beside it.
             var board = new Event

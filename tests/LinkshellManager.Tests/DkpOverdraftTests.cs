@@ -39,7 +39,7 @@ public class DkpOverdraftTests
         db.Users.Add(new AppUser { Id = "u1", UserName = "alice", CharacterName = "Alice" });
         var member = new AppUserLinkshell
         {
-            Id = 1, LinkshellId = Ls, AppUserId = "u1", CharacterName = "Alice", LinkshellDkp = balance
+            Id = 1, LinkshellId = Ls, AppUserId = "u1", LinkshellDkp = balance
         };
         db.AppUserLinkshells.Add(member);
         db.SaveChanges();

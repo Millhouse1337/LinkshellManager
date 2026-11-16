@@ -59,9 +59,9 @@ public class PastEventDkpCorrectionTests
             new AppUser { Id = "bob", UserName = "bob", CharacterName = "Bob" },
             new AppUser { Id = "alice", UserName = "alice", CharacterName = "Alice" });
         db.AppUserLinkshells.AddRange(
-            new AppUserLinkshell { Id = 1, LinkshellId = Ls, AppUserId = Officer, CharacterName = "Boss", Rank = LinkshellRanks.Leader, LinkshellDkp = 0 },
-            new AppUserLinkshell { Id = 2, LinkshellId = Ls, AppUserId = "bob", CharacterName = "Bob", Rank = LinkshellRanks.Member, LinkshellDkp = 0 },
-            new AppUserLinkshell { Id = 3, LinkshellId = Ls, AppUserId = "alice", CharacterName = "Alice", Rank = LinkshellRanks.Member, LinkshellDkp = 0 });
+            new AppUserLinkshell { Id = 1, LinkshellId = Ls, AppUserId = Officer, Rank = LinkshellRanks.Leader, LinkshellDkp = 0 },
+            new AppUserLinkshell { Id = 2, LinkshellId = Ls, AppUserId = "bob", Rank = LinkshellRanks.Member, LinkshellDkp = 0 },
+            new AppUserLinkshell { Id = 3, LinkshellId = Ls, AppUserId = "alice", Rank = LinkshellRanks.Member, LinkshellDkp = 0 });
         db.EventHistories.Add(new EventHistory
         {
             Id = HistoryId, LinkshellId = Ls, EventName = "Sky", EventType = "Sky", DkpPerHour = 10, Duration = 1,
@@ -76,7 +76,7 @@ public class PastEventDkpCorrectionTests
         foreach (var member in db.AppUserLinkshells.Where(m => m.AppUserId != Officer).ToList())
         {
             await writer.AppendAsync(member, "EventEarned", 10, DateTime.UtcNow, DkpPoolRef.Derived("Sky"),
-                new DkpEntryContext(CharacterName: member.CharacterName, EventName: "Sky", EventType: "Sky",
+                new DkpEntryContext(CharacterName: db.Users.Find(member.AppUserId)!.CharacterName, EventName: "Sky", EventType: "Sky",
                     Details: "DKP earned from completed event.", EventHistoryId: HistoryId),
                 CancellationToken.None);
         }

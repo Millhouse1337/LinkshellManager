@@ -38,13 +38,13 @@ public class CharacterNameValidatorPostgresTests : IAsyncLifetime
             db.Linkshells.Add(linkshell);
             db.Users.AddRange(
                 // "me" already shares "Bob" with Bob (from before the check existed).
-                new AppUser { Id = "me", UserName = "me", CharacterName = "Mine", AltCharacterName1 = "Bob" },
-                new AppUser { Id = "bob", UserName = "bob", CharacterName = "Bob", AltCharacterName2 = "Ébène" },
+                new AppUser { Id = "me", UserName = "me", CharacterName = "Mine" }.WithAlts("Bob"),
+                new AppUser { Id = "bob", UserName = "bob", CharacterName = "Bob" }.WithAlts(null, "Ébène"),
                 new AppUser { Id = "pat", UserName = "pat", CharacterName = "Pat", IsPlaceholder = true });
             db.AppUserLinkshells.AddRange(
-                new AppUserLinkshell { Linkshell = linkshell, AppUserId = "me", CharacterName = "Mine" },
-                new AppUserLinkshell { Linkshell = linkshell, AppUserId = "bob", CharacterName = "Bob" },
-                new AppUserLinkshell { Linkshell = linkshell, AppUserId = "pat", CharacterName = "Pat" });
+                new AppUserLinkshell { Linkshell = linkshell, AppUserId = "me" },
+                new AppUserLinkshell { Linkshell = linkshell, AppUserId = "bob" },
+                new AppUserLinkshell { Linkshell = linkshell, AppUserId = "pat" });
             await db.SaveChangesAsync();
         }
 

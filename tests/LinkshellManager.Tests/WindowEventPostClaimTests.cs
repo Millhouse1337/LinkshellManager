@@ -45,7 +45,7 @@ public class WindowEventPostClaimTests
         db.Users.Add(new AppUser { Id = AliceId, UserName = "alice", CharacterName = "Alice" });
         db.AppUserLinkshells.Add(new AppUserLinkshell
         {
-            Id = 1, LinkshellId = LinkshellId, AppUserId = AliceId, CharacterName = "Alice", LinkshellDkp = 0,
+            Id = 1, LinkshellId = LinkshellId, AppUserId = AliceId, LinkshellDkp = 0,
         });
         db.WindowEvents.Add(new WindowEvent
         {

@@ -179,25 +179,22 @@ public class UnregisteredCaptureMemberTests
             new AppUserLinkshell
             {
                 AppUserId = "user-1",
-                CharacterName = "Edicius",
                 AppUser = new AppUser
                 {
                     Id = "user-1",
                     CharacterName = "Accountname",
-                    AltCharacterName1 = "Athmilk",
-                    AltCharacterName2 = "Secondalt",
-                },
+                }.WithAlts("Athmilk", "Secondalt"),
             },
-            new AppUserLinkshell { CharacterName = "Noaccount" },
+            new AppUserLinkshell(), // no account
         };
         var roster = LinkshellRosterNames.FromMemberships(memberships, TestCharacters.Of(memberships));
 
-        Assert.False(roster.Contains("Edicius")); // a roster name that is not the main
+        Assert.False(roster.Contains("Edicius")); // a name the account does not have
         Assert.True(roster.Contains("Accountname"));
         Assert.True(roster.Contains("Athmilk"));
         Assert.True(roster.Contains("Secondalt"));
         Assert.True(roster.ContainsAppUserId("user-1"));
-        Assert.False(roster.Contains("Noaccount"));
+        Assert.False(roster.Contains("Noaccount")); // the membership with no account has no name
         Assert.False(roster.Contains("Randomguy"));
     }
 

@@ -49,8 +49,8 @@ public class PlaceholderClaimCampCreditTests : IAsyncLifetime
             db.Users.Add(new AppUser { Id = "ph", UserName = "ph", CharacterName = "Bobalt", IsPlaceholder = true });
             // The balances are not what this test is about (PlaceholderClaimMergeTests covers them);
             // it is only about the ledger rows.
-            db.AppUserLinkshells.Add(new AppUserLinkshell { Linkshell = linkshell, AppUserId = "real", CharacterName = "Bob", LinkshellDkp = 10 });
-            db.AppUserLinkshells.Add(new AppUserLinkshell { Linkshell = linkshell, AppUserId = "ph", CharacterName = "Bobalt", LinkshellDkp = 10 });
+            db.AppUserLinkshells.Add(new AppUserLinkshell { Linkshell = linkshell, AppUserId = "real", LinkshellDkp = 10 });
+            db.AppUserLinkshells.Add(new AppUserLinkshell { Linkshell = linkshell, AppUserId = "ph", LinkshellDkp = 10 });
             await db.SaveChangesAsync();
             linkshellId = linkshell.Id;
 

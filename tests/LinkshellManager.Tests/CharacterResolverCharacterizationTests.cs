@@ -18,8 +18,8 @@ namespace LinkshellManager.Tests;
 // the one CharacterResolver cannot quietly change who gets charged, refunded or credited.
 //
 // u1's main is "Rostername" and their alts are "Altone" / "Alttwo". u2 is "Other", with the alt
-// "Contested". u3, who joined after u2, has the main "Contested". Every roster name is its
-// account's main, as on production (Round 5 stopped reading the roster name; it was a copy).
+// "Contested". u3, who joined after u2, has the main "Contested". (The roster name these places
+// also read was always the account's main; Round 5 stopped reading it and R5.7 dropped it.)
 //
 // ChangedCases are the two answers that changed ON PURPOSE when the copies became one rule:
 //   - (the account's own CharacterName now resolves everywhere: the close, End Camp, the
@@ -47,26 +47,24 @@ public class CharacterResolverCharacterizationTests
             CanManageTods = true,
             CanManageAttendanceWithAddon = true,
         });
-        db.Users.Add(new AppUser
-        {
-            Id = "u1", UserName = "one", CharacterName = "Rostername",
-            AltCharacterName1 = "Altone", AltCharacterName2 = "Alttwo",
-        });
-        db.Users.Add(new AppUser { Id = "u2", UserName = "two", CharacterName = "Other", AltCharacterName1 = "Contested" });
+        db.Users.Add(new AppUser { Id = "u1", UserName = "one", CharacterName = "Rostername" });
+        TestCharacters.AddAlts(db, "u1", "Altone", "Alttwo");
+        db.Users.Add(new AppUser { Id = "u2", UserName = "two", CharacterName = "Other" });
+        TestCharacters.AddAlts(db, "u2", "Contested");
         db.Users.Add(new AppUser { Id = "u3", UserName = "three", CharacterName = "Contested" });
         db.AppUserLinkshells.Add(new AppUserLinkshell
         {
-            Id = 1, LinkshellId = Ls, AppUserId = "u1", CharacterName = "Rostername",
+            Id = 1, LinkshellId = Ls, AppUserId = "u1",
             Rank = LinkshellRanks.Member, LinkshellDkp = 100,
         });
         db.AppUserLinkshells.Add(new AppUserLinkshell
         {
-            Id = 2, LinkshellId = Ls, AppUserId = "u2", CharacterName = "Other",
+            Id = 2, LinkshellId = Ls, AppUserId = "u2",
             Rank = LinkshellRanks.Member, LinkshellDkp = 100,
         });
         db.AppUserLinkshells.Add(new AppUserLinkshell
         {
-            Id = 3, LinkshellId = Ls, AppUserId = "u3", CharacterName = "Contested",
+            Id = 3, LinkshellId = Ls, AppUserId = "u3",
             Rank = LinkshellRanks.Member, LinkshellDkp = 100,
         });
         db.SaveChanges();
@@ -126,7 +124,7 @@ public class CharacterResolverCharacterizationTests
             new EventLootDetail { ItemWinner = typed },
             memberships.ToDictionary(m => m.AppUserId!),
             new Dictionary<string, AppUserEvent>(StringComparer.OrdinalIgnoreCase),
-            CharacterResolver.ForMemberships(memberships, TestCharacters.Of(memberships)));
+            CharacterResolver.ForMemberships(memberships, TestCharacters.Of(db)));
 
         Assert.Equal(expected, winner?.AppUserId);
     }
@@ -148,7 +146,7 @@ public class CharacterResolverCharacterizationTests
             new EventLootDetail { ItemWinner = " stranger " },
             memberships.ToDictionary(m => m.AppUserId!),
             participants,
-            CharacterResolver.ForMemberships(memberships, TestCharacters.Of(memberships)));
+            CharacterResolver.ForMemberships(memberships, TestCharacters.Of(db)));
 
         Assert.Equal("u2", winner?.AppUserId);
     }

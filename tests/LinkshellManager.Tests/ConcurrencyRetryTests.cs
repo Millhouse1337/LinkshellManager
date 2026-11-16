@@ -35,7 +35,7 @@ public class ConcurrencyRetryTests
         db.Users.Add(new AppUser { Id = "bob", UserName = "bob", CharacterName = "Bob" });
         db.AppUserLinkshells.Add(new AppUserLinkshell
         {
-            Id = 1, LinkshellId = 1, AppUserId = "bob", CharacterName = "Bob", LinkshellDkp = 100,
+            Id = 1, LinkshellId = 1, AppUserId = "bob", LinkshellDkp = 100,
         });
         db.SaveChanges();
         db.ChangeTracker.Clear();

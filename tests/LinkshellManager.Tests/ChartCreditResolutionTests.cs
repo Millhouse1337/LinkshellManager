@@ -28,7 +28,6 @@ public class ChartCreditResolutionTests
         Id = id,
         LinkshellId = linkshellId,
         AppUserId = $"user-{id}",
-        CharacterName = name,
         AppUser = new AppUser { Id = $"user-{id}", UserName = $"user-{id}", CharacterName = name },
         Rank = "Member",
     };

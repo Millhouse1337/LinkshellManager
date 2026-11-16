@@ -67,11 +67,11 @@ public class MembershipRoleStampTests : IAsyncLifetime
 
         var members = new Dictionary<string, AppUserLinkshell>
         {
-            [Leader] = new() { LinkshellId = main.Id, AppUserId = Leader, CharacterName = "Boss", Rank = LinkshellRanks.Leader, LinkshellDkp = 0 },
-            [Raider] = new() { LinkshellId = main.Id, AppUserId = Raider, CharacterName = "Raidy", Rank = "Raider", LinkshellDkp = 0 },
-            [Padded] = new() { LinkshellId = main.Id, AppUserId = Padded, CharacterName = "Spacey", Rank = " Raider ", LinkshellDkp = 0 },
-            [Shouty] = new() { LinkshellId = main.Id, AppUserId = Shouty, CharacterName = "Loud", Rank = "OFFICER", LinkshellDkp = 0 },
-            [Elsewhere] = new() { LinkshellId = other.Id, AppUserId = Elsewhere, CharacterName = "Away", Rank = LinkshellRanks.Officer, LinkshellDkp = 0 },
+            [Leader] = new() { LinkshellId = main.Id, AppUserId = Leader, Rank = LinkshellRanks.Leader, LinkshellDkp = 0 },
+            [Raider] = new() { LinkshellId = main.Id, AppUserId = Raider, Rank = "Raider", LinkshellDkp = 0 },
+            [Padded] = new() { LinkshellId = main.Id, AppUserId = Padded, Rank = " Raider ", LinkshellDkp = 0 },
+            [Shouty] = new() { LinkshellId = main.Id, AppUserId = Shouty, Rank = "OFFICER", LinkshellDkp = 0 },
+            [Elsewhere] = new() { LinkshellId = other.Id, AppUserId = Elsewhere, Rank = LinkshellRanks.Officer, LinkshellDkp = 0 },
         };
         db.AppUserLinkshells.AddRange(members.Values);
         await db.SaveChangesAsync();
@@ -213,7 +213,7 @@ public class MembershipRoleStampTests : IAsyncLifetime
             db.Linkshells.Add(linkshell);
             db.AppUserLinkshells.Add(new AppUserLinkshell
             {
-                Linkshell = linkshell, AppUserId = "founder", CharacterName = "Founder",
+                Linkshell = linkshell, AppUserId = "founder",
                 Rank = LinkshellRanks.Leader, LinkshellDkp = 0,
             });
             await db.SaveChangesAsync();

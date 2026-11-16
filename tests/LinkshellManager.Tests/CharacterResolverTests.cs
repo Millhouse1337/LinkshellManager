@@ -8,8 +8,9 @@ namespace LinkshellManager.Tests;
 
 // The one rule for "which member is this character?" (Services/CharacterResolver.cs): the
 // account's main, then alt 1, then alt 2 (Characters); within a slot the oldest membership; trimmed
-// and ignoring capitals; never a membership with no account. The roster name is not read (Round 5):
-// a member built with only a roster name gets it as their main too, as every saved roster has it.
+// and ignoring capitals; never a membership with no account. A membership has no name of its own
+// (Round5Contract dropped the roster name): a member built with only a "roster" name below gets it
+// as their account main.
 public class CharacterResolverTests
 {
     private const int Ls = 7;
@@ -26,21 +27,17 @@ public class CharacterResolverTests
             Id = id,
             LinkshellId = Ls,
             AppUserId = appUserId,
-            CharacterName = roster,
             AppUser = appUserId is null
                 ? null
-                : new AppUser
-                {
-                    Id = appUserId, CharacterName = account ?? roster, AltCharacterName1 = alt1, AltCharacterName2 = alt2,
-                },
+                : new AppUser { Id = appUserId, CharacterName = account ?? roster }.WithAlts(alt1, alt2),
         };
 
-    // The in-memory builder, with the members' Characters rows made from their account columns.
+    // The in-memory builder, with the members' Characters rows (main from CharacterName, alts listed).
     private static CharacterResolver<AppUserLinkshell> ForMemberships(params AppUserLinkshell[] members) =>
         CharacterResolver.ForMemberships(members, TestCharacters.Of(members));
 
     [Theory]
-    // A roster name that is not the account's main is not one of the member's names any more.
+    // A name that is not one of the account's characters is nobody's.
     [InlineData("Roster", null)]
     [InlineData("ACCOUNT", "u1")]
     [InlineData(" altone", "u1")]
@@ -121,11 +118,11 @@ public class CharacterResolverTests
     public async Task TheLoaderAndThePairOverload_AgreeWithTheInMemoryOne()
     {
         await using var db = NewDb();
-        db.Users.Add(new AppUser { Id = "u1", UserName = "one", CharacterName = "Account1", AltCharacterName1 = "Shared" });
+        db.Users.Add(new AppUser { Id = "u1", UserName = "one", CharacterName = "Account1" }.WithAlts("Shared"));
         db.Users.Add(new AppUser { Id = "u2", UserName = "two", CharacterName = "Shared" });
-        db.AppUserLinkshells.Add(new AppUserLinkshell { Id = 1, LinkshellId = Ls, AppUserId = "u1", CharacterName = "Roster1" });
-        db.AppUserLinkshells.Add(new AppUserLinkshell { Id = 2, LinkshellId = Ls, AppUserId = "u2", CharacterName = "Roster2" });
-        db.AppUserLinkshells.Add(new AppUserLinkshell { Id = 3, LinkshellId = Ls + 1, AppUserId = "u1", CharacterName = "Elsewhere" });
+        db.AppUserLinkshells.Add(new AppUserLinkshell { Id = 1, LinkshellId = Ls, AppUserId = "u1" });
+        db.AppUserLinkshells.Add(new AppUserLinkshell { Id = 2, LinkshellId = Ls, AppUserId = "u2" });
+        db.AppUserLinkshells.Add(new AppUserLinkshell { Id = 3, LinkshellId = Ls + 1, AppUserId = "u1" });
         await db.SaveChangesAsync();
 
         var loaded = await CharacterResolver.LoadMembershipsAsync(db, Ls, CancellationToken.None);
@@ -140,8 +137,8 @@ public class CharacterResolverTests
         {
             Assert.Equal("u2", roster.Resolve("shared")?.AppUserId); // u2's account name beats u1's alt
             Assert.Equal("u1", roster.Resolve("account1")?.AppUserId);
-            Assert.Null(roster.Resolve("Elsewhere"));               // another linkshell's roster name
-            Assert.Null(roster.Resolve("Roster1"));                 // a roster name is not read
+            Assert.Null(roster.Resolve("Elsewhere"));               // a name nobody here has
+            Assert.Null(roster.Resolve("Roster1"));                 // nor this one
         }
     }
 }

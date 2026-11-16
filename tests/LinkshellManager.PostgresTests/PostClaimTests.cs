@@ -49,7 +49,7 @@ public class PostClaimTests : IAsyncLifetime
             db.Users.Add(new AppUser { Id = id, UserName = id, CharacterName = name });
             db.AppUserLinkshells.Add(new AppUserLinkshell
             {
-                Linkshell = linkshell, AppUserId = id, CharacterName = name, LinkshellDkp = 0,
+                Linkshell = linkshell, AppUserId = id, LinkshellDkp = 0,
             });
         }
 

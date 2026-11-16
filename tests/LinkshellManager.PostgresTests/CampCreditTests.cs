@@ -125,7 +125,7 @@ public class CampCreditTests : IAsyncLifetime
             db.Users.Add(new AppUser { Id = "alice", UserName = "alice", CharacterName = "Alice" });
             db.AppUserLinkshells.Add(new AppUserLinkshell
             {
-                Linkshell = linkshell, AppUserId = "alice", CharacterName = "Alice", LinkshellDkp = 0,
+                Linkshell = linkshell, AppUserId = "alice", LinkshellDkp = 0,
             });
             var card = new WindowEvent
             {

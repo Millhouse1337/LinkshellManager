@@ -47,7 +47,7 @@ public class CampDkpPoolTests
         db.Users.Add(new AppUser { Id = BobId, UserName = "bob", CharacterName = "Bob" });
         db.AppUserLinkshells.Add(new AppUserLinkshell
         {
-            Id = 2, LinkshellId = LinkshellId, AppUserId = BobId, CharacterName = "Bob", LinkshellDkp = bobDkp,
+            Id = 2, LinkshellId = LinkshellId, AppUserId = BobId, LinkshellDkp = bobDkp,
         });
         db.DkpPools.Add(new DkpPool { Id = MainPool, LinkshellId = LinkshellId, Name = "Main", IsDefault = true });
         db.DkpPools.Add(new DkpPool { Id = HnmPool, LinkshellId = LinkshellId, Name = "HNM", SortOrder = 1 });

@@ -77,12 +77,12 @@ public class EndEventThroughTheAppTests : IAsyncLifetime
         db.DkpPools.Add(DkpPoolDefaults.BuildDefaultPool(linkshell.Id));
         db.Users.AddRange(
             new AppUser { Id = Officer, UserName = Officer, CharacterName = "Boss" },
-            new AppUser { Id = "alice", UserName = "alice", CharacterName = "Alice", AltCharacterName1 = "Alicealt" },
+            new AppUser { Id = "alice", UserName = "alice", CharacterName = "Alice" }.WithAlts("Alicealt"),
             new AppUser { Id = "dave", UserName = "dave", CharacterName = "Dave" });
         db.AppUserLinkshells.AddRange(
-            new AppUserLinkshell { LinkshellId = linkshell.Id, AppUserId = Officer, CharacterName = "Boss", Rank = LinkshellRanks.Leader, LinkshellDkp = 0 },
-            new AppUserLinkshell { LinkshellId = linkshell.Id, AppUserId = "alice", CharacterName = "Alice", Rank = LinkshellRanks.Member, LinkshellDkp = 0 },
-            new AppUserLinkshell { LinkshellId = linkshell.Id, AppUserId = "dave", CharacterName = "Dave", Rank = LinkshellRanks.Member, LinkshellDkp = 0 });
+            new AppUserLinkshell { LinkshellId = linkshell.Id, AppUserId = Officer, Rank = LinkshellRanks.Leader, LinkshellDkp = 0 },
+            new AppUserLinkshell { LinkshellId = linkshell.Id, AppUserId = "alice", Rank = LinkshellRanks.Member, LinkshellDkp = 0 },
+            new AppUserLinkshell { LinkshellId = linkshell.Id, AppUserId = "dave", Rank = LinkshellRanks.Member, LinkshellDkp = 0 });
 
         var setup = new PartySetup { LinkshellId = linkshell.Id, Name = "Dynamis" };
         var slot = new PartySetupSlot { SortOrder = 0 };

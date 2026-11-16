@@ -43,7 +43,7 @@ public class HybridEventLootTests
         db.Users.Add(actor);
         db.AppUserLinkshells.Add(new AppUserLinkshell
         {
-            Id = 1, LinkshellId = Ls, AppUserId = "u1", CharacterName = "Edicius", LinkshellDkp = dkp
+            Id = 1, LinkshellId = Ls, AppUserId = "u1", LinkshellDkp = dkp
         });
         db.EventHistories.Add(new EventHistory
         {
@@ -104,7 +104,7 @@ public class HybridEventLootTests
         db.Users.Add(new AppUser { Id = "u1", UserName = "edicius", CharacterName = "Edicius" });
         db.AppUserLinkshells.Add(new AppUserLinkshell
         {
-            Id = 1, LinkshellId = Ls, AppUserId = "u1", CharacterName = "Edicius", LinkshellDkp = 40
+            Id = 1, LinkshellId = Ls, AppUserId = "u1", LinkshellDkp = 40
         });
         db.Events.Add(new Event { Id = 9, LinkshellId = Ls, EventName = "Sky", EventType = "Sky" });
         db.SaveChanges();

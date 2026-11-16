@@ -33,8 +33,8 @@ public sealed class PastEventCorrectionPipelineTests : IAsyncLifetime
         {
             db.Linkshells.Add(new Linkshell { Id = Ls, LinkshellName = "LS", AppUserId = LeaderId });
             db.AppUserLinkshells.AddRange(
-                new AppUserLinkshell { AppUserId = LeaderId, LinkshellId = Ls, CharacterName = "Boss", Rank = LinkshellRanks.Leader, Status = "Active", LinkshellDkp = 10 },
-                new AppUserLinkshell { AppUserId = MemberId, LinkshellId = Ls, CharacterName = "Bob", Rank = LinkshellRanks.Member, Status = "Active", LinkshellDkp = 10 });
+                new AppUserLinkshell { AppUserId = LeaderId, LinkshellId = Ls, Rank = LinkshellRanks.Leader, Status = "Active", LinkshellDkp = 10 },
+                new AppUserLinkshell { AppUserId = MemberId, LinkshellId = Ls, Rank = LinkshellRanks.Member, Status = "Active", LinkshellDkp = 10 });
             db.EventHistories.Add(new EventHistory { Id = HistoryId, LinkshellId = Ls, EventName = "Sky", EventType = "Sky", DkpPerHour = 10, Duration = 1 });
             db.AppUserEventHistories.AddRange(
                 new AppUserEventHistory { Id = LeaderRow, EventHistoryId = HistoryId, AppUserId = LeaderId, CharacterName = "Boss", EventDkp = 10 },

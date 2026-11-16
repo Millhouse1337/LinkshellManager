@@ -44,7 +44,7 @@ public class ConcurrencyTests : IAsyncLifetime
         db.Users.Add(new AppUser { Id = "bob", UserName = "bob", CharacterName = "Bob" });
         db.AppUserLinkshells.Add(new AppUserLinkshell
         {
-            LinkshellId = linkshell.Id, AppUserId = "bob", CharacterName = "Bob", LinkshellDkp = 100,
+            LinkshellId = linkshell.Id, AppUserId = "bob", LinkshellDkp = 100,
         });
         var ev = new Event { LinkshellId = linkshell.Id, EventName = "Fafnir", EventType = "HNM" };
         db.Events.Add(ev);

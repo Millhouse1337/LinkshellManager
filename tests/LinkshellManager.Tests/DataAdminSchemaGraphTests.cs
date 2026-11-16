@@ -730,7 +730,7 @@ public class DataAdminSchemaGraphTests
         var id = Column(graph, "Linkshell", "Id");
         Assert.Equal("integer", id.StoreType);
         Assert.Equal("int", id.Type);
-        var jobLevels = Column(graph, nameof(AppUser), nameof(AppUser.JobLevels));
+        var jobLevels = Column(graph, nameof(Character), nameof(Character.JobLevels));
         Assert.Equal("jsonb", jobLevels.StoreType);
         Assert.True(jobLevels.Protected);
         var poolName = Column(graph, nameof(DkpPool), nameof(DkpPool.Name));

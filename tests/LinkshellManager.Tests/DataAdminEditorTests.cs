@@ -32,7 +32,7 @@ public class DataAdminEditorTests
         db.Linkshells.Add(new Linkshell { Id = 2, LinkshellName = "Titans", LootStructure = "Dkp" });
         db.Rules.Add(new Rule { Id = 1, LinkshellId = 1, RuleTitle = "Loot rules", RuleDetails = "No ninja looting" });
         db.Users.Add(new AppUser { Id = "u1", UserName = "someone", CharacterName = "Millhouse", IsSuperAdmin = false });
-        db.AppUserLinkshells.Add(new AppUserLinkshell { Id = 1, AppUserId = "u1", LinkshellId = 1, CharacterName = "Millhouse", Rank = LinkshellRanks.Member });
+        db.AppUserLinkshells.Add(new AppUserLinkshell { Id = 1, AppUserId = "u1", LinkshellId = 1, Rank = LinkshellRanks.Member });
         db.DkpPools.Add(new DkpPool { Id = 1, LinkshellId = 1, Name = "Main", IsDefault = true });
         db.DiscordActivityUsers.Add(new DiscordActivityUser { Id = DiscordUserKey, DiscordUserId = "123", Username = "mill" });
         await db.SaveChangesAsync();

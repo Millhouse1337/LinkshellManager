@@ -25,7 +25,7 @@ public sealed class AddonContractPipelineTests : IClassFixture<AddonContractPipe
                 db.Linkshells.Add(new Linkshell { Id = OtherLinkshellId, LinkshellName = "Other LS", AppUserId = OfficerId });
                 db.AppUserLinkshells.Add(new AppUserLinkshell
                 {
-                    AppUserId = OfficerId, LinkshellId = OwnLinkshellId, CharacterName = "Officer",
+                    AppUserId = OfficerId, LinkshellId = OwnLinkshellId,
                     Rank = LinkshellRanks.Leader, Status = "Active",
                 });
                 db.AddonApiTokens.Add(new AddonApiToken

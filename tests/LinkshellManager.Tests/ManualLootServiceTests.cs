@@ -41,7 +41,7 @@ public class ManualLootServiceTests
         db.Users.Add(new AppUser { Id = "u1", UserName = "alice", CharacterName = "Alice" });
         db.AppUserLinkshells.Add(new AppUserLinkshell
         {
-            Id = 1, LinkshellId = Ls, AppUserId = "u1", CharacterName = "Alice", LinkshellDkp = 100,
+            Id = 1, LinkshellId = Ls, AppUserId = "u1", LinkshellDkp = 100,
         });
         // Started: only a RUNNING event holds loot for its close (EventRunState).
         db.Events.Add(new Event

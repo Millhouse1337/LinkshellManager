@@ -37,8 +37,8 @@ public class WindowsAttendedPerAccountTests
         db.Linkshells.Add(new Linkshell { Id = Ls, LinkshellName = "LS", LootStructure = "Dkp" });
         db.Users.Add(new AppUser { Id = "bob", UserName = "bob" });
         db.Users.Add(new AppUser { Id = "carol", UserName = "carol" });
-        db.AppUserLinkshells.Add(new AppUserLinkshell { Id = 1, LinkshellId = Ls, AppUserId = "bob", CharacterName = "Bob" });
-        db.AppUserLinkshells.Add(new AppUserLinkshell { Id = 2, LinkshellId = Ls, AppUserId = "carol", CharacterName = "Carol" });
+        db.AppUserLinkshells.Add(new AppUserLinkshell { Id = 1, LinkshellId = Ls, AppUserId = "bob" });
+        db.AppUserLinkshells.Add(new AppUserLinkshell { Id = 2, LinkshellId = Ls, AppUserId = "carol" });
 
         var start = DateTime.UtcNow.AddHours(-2);
         db.Events.Add(new Event

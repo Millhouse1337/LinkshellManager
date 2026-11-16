@@ -40,7 +40,7 @@ public class CampSpawnKeyLookupTests
         db.Users.Add(new AppUser { Id = "u1", UserName = "alice", CharacterName = "Alice" });
         db.AppUserLinkshells.Add(new AppUserLinkshell
         {
-            Id = 1, LinkshellId = Ls, AppUserId = "u1", CharacterName = "Alice", LinkshellDkp = 100,
+            Id = 1, LinkshellId = Ls, AppUserId = "u1", LinkshellDkp = 100,
             Rank = LinkshellRanks.Leader,
         });
         db.Events.Add(new Event

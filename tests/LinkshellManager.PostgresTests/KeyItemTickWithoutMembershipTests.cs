@@ -36,8 +36,8 @@ public class KeyItemTickWithoutMembershipTests : IAsyncLifetime
             db.Users.AddRange(
                 new AppUser { Id = "aeris", UserName = "aeris", CharacterName = "Aeris" },
                 new AppUser { Id = "bob", UserName = "bob", CharacterName = "Bob" });
-            var aeris = new AppUserLinkshell { Linkshell = linkshell, AppUserId = "aeris", CharacterName = "Aeris" };
-            var bob = new AppUserLinkshell { Linkshell = linkshell, AppUserId = "bob", CharacterName = "Bob" };
+            var aeris = new AppUserLinkshell { Linkshell = linkshell, AppUserId = "aeris" };
+            var bob = new AppUserLinkshell { Linkshell = linkshell, AppUserId = "bob" };
             db.AppUserLinkshells.AddRange(aeris, bob);
             await db.SaveChangesAsync();
             linkshellId = linkshell.Id;
