@@ -7,7 +7,9 @@ using Xunit;
 namespace LinkshellManager.PostgresTests;
 
 // Round 5 (AddCampSpawnKeys): on real Postgres the save hook stamps SpawnKey on the camp tables,
-// and every key it wrote is what the migration's SQL fill would have written for that row.
+// and every key it wrote is what the migration's SQL fill would have written for that row. Since
+// CampSpawnKeySwitch a linkshell keeps one Monster Setups row per spawn, so the timings get their
+// own list of names (one per spawn) and a second row for a spawn is refused.
 [Collection("postgres")]
 public class CampSpawnKeyStampTests : IAsyncLifetime
 {
@@ -33,6 +35,7 @@ public class CampSpawnKeyStampTests : IAsyncLifetime
             linkshellId = linkshell.Id;
 
             var names = new[] { "Nidhogg", " Fafnir/Nidhogg ", "King Behemoth", "Foo / Bar", "Tiamat", "", null };
+            var timingNames = new[] { " Fafnir/Nidhogg ", "Cerberus", "King Behemoth", "Foo / Bar", "Tiamat", "", null };
             for (var i = 0; i < names.Length; i++)
             {
                 db.Events.Add(new Event { LinkshellId = linkshellId, EventName = $"Camp {i}", AssignedMonsterName = names[i] });
@@ -46,7 +49,7 @@ public class CampSpawnKeyStampTests : IAsyncLifetime
                 });
                 db.LinkshellMonsterTimings.Add(new LinkshellMonsterTiming
                 {
-                    LinkshellId = linkshellId, MonsterName = names[i] ?? string.Empty, NormalizedMonsterName = $"n{i}",
+                    LinkshellId = linkshellId, MonsterName = timingNames[i] ?? string.Empty, NormalizedMonsterName = $"n{i}",
                     CooldownMinutes = 1320, CreatedAtUtc = At, UpdatedAtUtc = At, SortOrder = i,
                 });
             }
@@ -59,8 +62,22 @@ public class CampSpawnKeyStampTests : IAsyncLifetime
             var tiamat = await db.Events.SingleAsync(e => e.AssignedMonsterName == "Tiamat");
             tiamat.AssignedMonsterName = "Aspidochelone";
             var timing = await db.LinkshellMonsterTimings.SingleAsync(t => t.MonsterName == "Tiamat");
-            timing.MonsterName = "Behemoth/King Behemoth";
+            timing.MonsterName = "Aspidochelone";
             await db.SaveChangesAsync();
+        }
+
+        // A second Monster Setups row for a spawn the linkshell already has is refused.
+        await using (var db = _pg.CreateContext())
+        {
+            db.LinkshellMonsterTimings.Add(new LinkshellMonsterTiming
+            {
+                LinkshellId = linkshellId, MonsterName = "Nidhogg", NormalizedMonsterName = "nidhogg",
+                CooldownMinutes = 1320, CreatedAtUtc = At, UpdatedAtUtc = At,
+            });
+            var refused = await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
+            var inner = Assert.IsType<PostgresException>(refused.InnerException);
+            Assert.Equal(PostgresErrorCodes.UniqueViolation, inner.SqlState);
+            Assert.Equal("IX_LinkshellMonsterTimings_LinkshellId_SpawnKey", inner.ConstraintName);
         }
 
         await using var c = new NpgsqlConnection(_pg.ConnectionString);
@@ -69,7 +86,7 @@ public class CampSpawnKeyStampTests : IAsyncLifetime
             "fafnir/nidhogg|fafnir/nidhogg|behemoth/king behemoth|foo/bar|adamantoise/aspidochelone",
             await ScalarAsync(c, "SELECT string_agg(\"SpawnKey\", '|' ORDER BY \"Id\") FROM \"Events\""));
         Assert.Equal(
-            "fafnir/nidhogg|fafnir/nidhogg|behemoth/king behemoth|foo/bar|behemoth/king behemoth",
+            "fafnir/nidhogg|cerberus|behemoth/king behemoth|foo/bar|adamantoise/aspidochelone",
             await ScalarAsync(c, "SELECT string_agg(\"SpawnKey\", '|' ORDER BY \"Id\") FROM \"LinkshellMonsterTimings\""));
 
         // The migration's SQL agrees with every key the hook wrote, blanks included.

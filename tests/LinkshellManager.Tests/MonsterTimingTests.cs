@@ -67,6 +67,19 @@ public class MonsterTimingTests
         }
     }
 
+    // CampSpawnKeySwitch makes (LinkshellId, SpawnKey) unique, so the first-look seed must give
+    // every row its own spawn key; otherwise the provisioner's insert would fail and the linkshell
+    // would never be seeded.
+    [Fact]
+    public void SeededCatalog_HasOneRowPerSpawnKey()
+    {
+        var keys = LinkshellMonsterTimingProvisioner.BuildSeed(LinkshellId, Now)
+            .Select(row => HnmConfig.SpawnKey(row.MonsterName))
+            .ToList();
+        Assert.DoesNotContain(null, keys);
+        Assert.Equal(keys.Count, keys.Distinct(StringComparer.Ordinal).Count());
+    }
+
     // The Sky farm NMs were seeded as a heading of their own; they are not seeded at all any more.
     // The seed is now EXACTLY the create-event dropdown, so this is the other half of
     // SeededCatalog_ContainsEveryDropdownOption — together they pin the two lists as equal rather

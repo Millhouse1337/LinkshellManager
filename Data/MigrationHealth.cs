@@ -17,9 +17,8 @@ namespace LinkshellManagerDiscordApp.Data;
 //   same way when a member has no role).
 public static class MigrationHealth
 {
-    // The guarded indexes that exist today. Add a name here only in the deploy whose migration
-    // creates it (for example IX_LinkshellMonsterTimings_LinkshellId_SpawnKey in Round 5), so a
-    // healthy database never warns.
+    // The guarded indexes that exist today, each unique. Add a name here only in the deploy whose
+    // migration creates it, so a healthy database never warns.
     public static readonly IReadOnlyList<string> GuardedIndexes =
     [
         "IX_EventAttendanceWindows_OneClosePerEvent",
@@ -27,6 +26,7 @@ public static class MigrationHealth
         "IX_JournalEntries_OneReversalPerEntry",
         "IX_Characters_AppUserId_NormalizedName",
         "IX_HnmRecurringBoards_LinkshellId_SpawnKey",
+        "IX_LinkshellMonsterTimings_LinkshellId_SpawnKey",
     ];
 
     // The columns a guarded migration makes NOT NULL, as "Table.Column". Same rule as above: add one

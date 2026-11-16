@@ -1814,9 +1814,10 @@ namespace LinkshellManagerDiscordApp.Data
                 // MonsterTimingEditor rejects a duplicate under HnmConfig.MonsterMatchNames before
                 // it ever reaches the DB.
                 entity.HasIndex(timing => new { timing.LinkshellId, timing.NormalizedMonsterName }).IsUnique();
-                // Derived column (AddCampSpawnKeys), stamped by StampDerivedColumns. Not unique yet:
-                // a later deploy makes it unique once two rows for one spawn are ruled out.
-                entity.HasIndex(timing => new { timing.LinkshellId, timing.SpawnKey });
+                // Derived column (AddCampSpawnKeys), stamped by StampDerivedColumns. One row per
+                // SPAWN: CampSpawnKeySwitch makes this unique, guarded (if two rows already named one
+                // spawn it keeps the plain index and warns, and MigrationHealth says so on start-up).
+                entity.HasIndex(timing => new { timing.LinkshellId, timing.SpawnKey }).IsUnique();
                 entity.HasOne(timing => timing.Linkshell)
                     .WithMany()
                     .HasForeignKey(timing => timing.LinkshellId)

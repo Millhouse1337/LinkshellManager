@@ -2878,7 +2878,8 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.HasIndex("LinkshellId", "NormalizedMonsterName")
                         .IsUnique();
 
-                    b.HasIndex("LinkshellId", "SpawnKey");
+                    b.HasIndex("LinkshellId", "SpawnKey")
+                        .IsUnique();
 
                     b.ToTable("LinkshellMonsterTimings", (string)null);
                 });

@@ -1484,7 +1484,7 @@ index	LinkshellChannelRoutes.IX_LinkshellChannelRoutes_OneLootRoute	CREATE UNIQU
 index	LinkshellChannelRoutes.IX_LinkshellChannelRoutes_OneTodBoardRoute	CREATE UNIQUE INDEX "IX_LinkshellChannelRoutes_OneTodBoardRoute" ON public."LinkshellChannelRoutes" USING btree ("LinkshellId") WHERE "PostTodBoard"
 index	LinkshellChannelRoutes.PK_LinkshellChannelRoutes	CREATE UNIQUE INDEX "PK_LinkshellChannelRoutes" ON public."LinkshellChannelRoutes" USING btree ("Id")
 index	LinkshellMonsterTimings.IX_LinkshellMonsterTimings_LinkshellId_NormalizedMonsterName	CREATE UNIQUE INDEX "IX_LinkshellMonsterTimings_LinkshellId_NormalizedMonsterName" ON public."LinkshellMonsterTimings" USING btree ("LinkshellId", "NormalizedMonsterName")
-index	LinkshellMonsterTimings.IX_LinkshellMonsterTimings_LinkshellId_SpawnKey	CREATE INDEX "IX_LinkshellMonsterTimings_LinkshellId_SpawnKey" ON public."LinkshellMonsterTimings" USING btree ("LinkshellId", "SpawnKey")
+index	LinkshellMonsterTimings.IX_LinkshellMonsterTimings_LinkshellId_SpawnKey	CREATE UNIQUE INDEX "IX_LinkshellMonsterTimings_LinkshellId_SpawnKey" ON public."LinkshellMonsterTimings" USING btree ("LinkshellId", "SpawnKey")
 index	LinkshellMonsterTimings.PK_LinkshellMonsterTimings	CREATE UNIQUE INDEX "PK_LinkshellMonsterTimings" ON public."LinkshellMonsterTimings" USING btree ("Id")
 index	LinkshellPresences.IX_LinkshellPresences_LinkshellId_CharacterName	CREATE UNIQUE INDEX "IX_LinkshellPresences_LinkshellId_CharacterName" ON public."LinkshellPresences" USING btree ("LinkshellId", "CharacterName")
 index	LinkshellPresences.IX_LinkshellPresences_LinkshellId_LastSeenUtc	CREATE INDEX "IX_LinkshellPresences_LinkshellId_LastSeenUtc" ON public."LinkshellPresences" USING btree ("LinkshellId", "LastSeenUtc")

@@ -93,8 +93,9 @@ public class MigrationNoticeLoggingTests
         }
     }
 
-    // Every guarded index the health check names exists in a database built from Baseline, so a
-    // healthy production start-up logs no warning.
+    // Every guarded index the health check names exists and is unique in a database built from
+    // Baseline, and every guarded column is NOT NULL, so a healthy production start-up logs no
+    // warning.
     [Fact]
     public async Task Health_OnABaselineDatabase_LogsNothing()
     {
@@ -108,7 +109,8 @@ public class MigrationNoticeLoggingTests
             Assert.Equal(0, await MigrationHealth.LogProblemsAsync(db, log, CancellationToken.None));
             Assert.DoesNotContain(log.Entries, e => e.Level >= LogLevel.Warning);
             Assert.Contains("IX_JournalEntries_OneReversalPerEntry", MigrationHealth.GuardedIndexes);
-            Assert.DoesNotContain("IX_LinkshellMonsterTimings_LinkshellId_SpawnKey", MigrationHealth.GuardedIndexes);
+            Assert.Contains("IX_LinkshellMonsterTimings_LinkshellId_SpawnKey", MigrationHealth.GuardedIndexes);
+            Assert.Contains("AppUserLinkshells.LinkshellRoleId", MigrationHealth.GuardedNotNullColumns);
         }
         finally
         {
