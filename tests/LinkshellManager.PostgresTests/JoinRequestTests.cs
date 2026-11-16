@@ -290,7 +290,8 @@ public class JoinRequestTests : IAsyncLifetime
         Assert.Equal(LinkshellRanks.Member, membership.Rank);
         Assert.Equal("Active", membership.Status);
         Assert.Equal(0, membership.LinkshellDkp);
-        Assert.Equal("Newbie", membership.CharacterName);
+        // Since R5.6 a new membership has no roster name: the roster shows the account's main.
+        Assert.Null(membership.CharacterName);
 
         var answered = await RequestRowAsync(Player, hunters);
         Assert.Equal(JoinRequestService.ApprovedStatus, answered.Status);

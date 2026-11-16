@@ -67,7 +67,7 @@ public sealed class AppUserProfileService
         }
 
         // The names are written to Characters (CharacterWriter); the save copies the main onto the
-        // account's CharacterName and the roster names. Kept alts are left as they are.
+        // account's CharacterName. Kept alts are left as they are.
         var characters = await CharacterWriter.LoadAsync(_dbContext, user.Id, cancellationToken);
         try
         {

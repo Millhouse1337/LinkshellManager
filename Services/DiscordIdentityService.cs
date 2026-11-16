@@ -649,7 +649,6 @@ public sealed class DiscordIdentityService
                     LinkshellId = invite.LinkshellId,
                     LinkshellDkp = 0,
                     DateJoined = DateTime.UtcNow,
-                    // The roster name is stamped by the save (a copy of the account's main).
                     Rank = LinkshellRanks.Member,
                     Status = "Active"
                 };

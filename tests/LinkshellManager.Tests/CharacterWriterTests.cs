@@ -9,8 +9,8 @@ namespace LinkshellManager.Tests;
 #pragma warning disable CS0618 // These tests check the old account columns are left alone.
 
 // Round 5: CharacterWriter changes an account's Characters rows, and the save copies the main's name
-// onto the account (CharacterName) and onto the roster name. Since R5.6 the old account alt, job and
-// craft columns are not written: they keep what they held (what the R5.5 build last copied there).
+// onto the account (CharacterName). Since R5.6 the old account alt, job and craft columns and the
+// roster name are not written: they keep what they held (what the R5.5 build last copied there).
 public class CharacterWriterTests
 {
     private static ApplicationDbContext NewDb(string? name = null) =>
@@ -31,8 +31,9 @@ public class CharacterWriterTests
         return name;
     }
 
-    // An account whose old columns hold what the R5.5 build copied there (its Characters rows are
-    // written through the writer in the same save, so the save does not adopt the old columns).
+    // An account whose old columns and roster names hold what the R5.5 build copied there (its
+    // Characters rows are written through the writer in the same save, so the save does not adopt the
+    // old columns).
     private static async Task<string> SeedWithOldColumnsAsync()
     {
         var name = Guid.NewGuid().ToString();
@@ -50,6 +51,9 @@ public class CharacterWriterTests
         set.SetCrafts(Character.MainSlot, new[] { 9 });
         set.SetJobs(Character.Alt1Slot, jobLevels: new[] { 50 });
         set.SetCrafts(Character.Alt1Slot, new[] { 3 });
+        // R5.5 copied the main onto the roster names.
+        db.AppUserLinkshells.Add(new AppUserLinkshell { Id = 1, LinkshellId = 7, AppUserId = "me", CharacterName = "Main" });
+        db.AppUserLinkshells.Add(new AppUserLinkshell { Id = 2, LinkshellId = 8, AppUserId = "me", CharacterName = "Main" });
         await db.SaveChangesAsync();
         return name;
     }
@@ -66,22 +70,22 @@ public class CharacterWriterTests
     private const string SeededOldColumns = "Altone||75|1|x|9|50|-|-|3|-|-|-|-";
 
     [Fact]
-    public async Task ANewAccount_GetsItsMain_AndItsMembershipsTheMain_ButNoOldColumns()
+    public async Task ANewAccount_GetsItsMain_ButNoOldColumnsOrRosterNames()
     {
         var name = await SeedAsync(" Main ", "Altone", null);
         await using var db = NewDb(name);
 
         var user = await db.Users.AsNoTracking().SingleAsync(u => u.Id == "me");
         Assert.Equal("Main", user.CharacterName);
-        // R5.6: the old columns are not written, so a new account's stay empty.
+        // R5.6: the old columns and the roster names are not written, so a new account's stay empty.
         Assert.Equal("||-|-|-|-|-|-|-|-|-|-|-|-", OldColumns(user));
-        Assert.All(await db.AppUserLinkshells.AsNoTracking().ToListAsync(), link => Assert.Equal("Main", link.CharacterName));
+        Assert.All(await db.AppUserLinkshells.AsNoTracking().ToListAsync(), link => Assert.Null(link.CharacterName));
         Assert.Equal(new[] { ("Main", "main"), ("Altone", "altone") },
             (await db.Characters.AsNoTracking().OrderBy(c => c.Slot).ToListAsync()).Select(c => (c.Name, c.NormalizedName)));
     }
 
     [Fact]
-    public async Task RenamingTheMain_RenamesTheAccountAndEveryMembership_AndLeavesTheOldColumns()
+    public async Task RenamingTheMain_RenamesTheAccount_AndLeavesTheOldColumnsAndRosterNames()
     {
         var name = await SeedWithOldColumnsAsync();
         await using (var db = NewDb(name))
@@ -95,6 +99,7 @@ public class CharacterWriterTests
         var user = await check.Users.AsNoTracking().SingleAsync(u => u.Id == "me");
         Assert.Equal("Altone", user.CharacterName);
         Assert.Equal(SeededOldColumns, OldColumns(user));
+        Assert.All(await check.AppUserLinkshells.AsNoTracking().ToListAsync(), link => Assert.Equal("Main", link.CharacterName));
         Assert.Equal(new[] { "Altone", "Main", "Alttwo" },
             (await check.Characters.AsNoTracking().OrderBy(c => c.Slot).ToListAsync()).Select(c => c.Name));
     }
@@ -201,24 +206,32 @@ public class CharacterWriterTests
         await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
     }
 
+    // Since R5.6 the save never writes a roster name: a new membership gets none.
     [Fact]
-    public async Task ANewMembership_TakesTheAccountsMain_WhateverItWasGiven()
+    public async Task ANewMembership_GetsNoRosterName()
     {
         var name = await SeedAsync("Main");
         await using (var db = NewDb(name))
         {
-            db.AppUserLinkshells.Add(new AppUserLinkshell { Id = 3, LinkshellId = 9, AppUserId = "me", CharacterName = "Something else" });
+            db.AppUserLinkshells.Add(new AppUserLinkshell { Id = 3, LinkshellId = 9, AppUserId = "me" });
+            var joined = LinkshellMembership.NewMember(await db.Users.SingleAsync(u => u.Id == "me"), 10, DateTime.UtcNow);
+            joined.Id = 4;
+            db.AppUserLinkshells.Add(joined);
             await db.SaveChangesAsync();
         }
 
         await using var check = NewDb(name);
-        Assert.Equal("Main", (await check.AppUserLinkshells.AsNoTracking().SingleAsync(l => l.Id == 3)).CharacterName);
+        Assert.All(await check.AppUserLinkshells.AsNoTracking().Where(l => l.LinkshellId >= 9).ToListAsync(),
+            link => Assert.Null(link.CharacterName));
+        Assert.Equal(2, await check.AppUserLinkshells.CountAsync(l => l.LinkshellId >= 9));
     }
 
+    // A membership moved to another account (a placeholder claim) keeps the roster name it had: the
+    // save no longer stamps it. Nothing reads it; the roster shows the new account's main.
     [Fact]
-    public async Task AMembershipMovedToAnotherAccount_TakesThatAccountsMain()
+    public async Task AMembershipMovedToAnotherAccount_KeepsItsOldRosterName()
     {
-        var name = await SeedAsync("Main");
+        var name = await SeedWithOldColumnsAsync();
         await using (var db = NewDb(name))
         {
             var other = new AppUser { Id = "other", UserName = "other" };
@@ -232,7 +245,9 @@ public class CharacterWriterTests
         }
 
         await using var check = NewDb(name);
-        Assert.Equal("Othermain", (await check.AppUserLinkshells.AsNoTracking().SingleAsync(l => l.Id == 2)).CharacterName);
+        var moved = await check.AppUserLinkshells.AsNoTracking().Include(l => l.AppUser).SingleAsync(l => l.Id == 2);
+        Assert.Equal(("other", "Main"), (moved.AppUserId, moved.CharacterName));
+        Assert.Equal("Othermain", moved.AppUser!.CharacterName);
         Assert.Equal("Main", (await check.AppUserLinkshells.AsNoTracking().SingleAsync(l => l.Id == 1)).CharacterName);
     }
 

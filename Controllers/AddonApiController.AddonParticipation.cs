@@ -264,8 +264,8 @@ public sealed partial class AddonApiController
                 if (issuerUser is not null && string.IsNullOrWhiteSpace(issuerUser.CharacterName))
                 {
                     // Written as the account's main character (CharacterWriter); the save copies it
-                    // onto the account's CharacterName and the roster names. Skipped when one of the
-                    // account's alts already has this name.
+                    // onto the account's CharacterName. Skipped when one of the account's alts
+                    // already has this name.
                     var characters = await CharacterWriter.LoadAsync(_dbContext, issuerUser.Id, cancellationToken);
                     characters.TrySetName(Character.MainSlot, selfName);
                 }

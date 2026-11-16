@@ -35,9 +35,9 @@ public class AppUserLinkshell
     public Linkshell? Linkshell { get; set; }
 
     // The roster name. Round 5: never read (the roster shows the account's CharacterName and names
-    // resolve through the account's Characters), and written only by the save, as a copy of the
-    // account's main (ApplicationDbContext.StampRosterNamesAsync), so the build before the name switch
-    // still sees the right names if it is swapped back in.
+    // resolve through the account's Characters), and never written since R5.6: it holds what the
+    // R5.5 build last copied there (the account's main), and a membership made since has none.
+    // ROUND5-DROP: roster name, unread since R5.4, unwritten since R5.6.
     [Obsolete("Round 5: the roster name is not read. Use AppUser.CharacterName (the account main) instead.")]
     public string? CharacterName { get; set; }
 

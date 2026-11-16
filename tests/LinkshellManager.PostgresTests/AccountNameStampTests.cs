@@ -25,11 +25,12 @@ namespace LinkshellManager.PostgresTests;
 // Round 5 (R5.6): Characters is the only written source of names, jobs and crafts, and the save
 // stamps exactly one copy of it: the account's CharacterName (the main's, slot 0, name). After EVERY
 // writer path of this build:
-// - every account's CharacterName is exactly its main's name, and every roster name its account's
-//   main (the R5.5 start-up check's counts, AccountNameMirrorCounts);
-// - the old account alt, job and craft columns are NOT written: an account keeps what the R5.5 build
-//   last copied there (each test starts from that), and a new account has none.
-// Rolling back to R5.5 is safe without SQL: R5.5 reads none of the old columns.
+// - every account's CharacterName is exactly its main's name (the R5.5 start-up check's "Mains"
+//   count, AccountNameMirrorCounts);
+// - the old account alt, job and craft columns and the roster names are NOT written: an account or
+//   membership keeps what the R5.5 build last copied there (each test starts from that), and a new
+//   one has none.
+// Rolling back to R5.5 is safe without SQL: R5.5 reads none of them.
 //
 // Going back further (to R5.4, which reads the old columns and copies them INTO Characters) needs
 // the "mirror refill" SQL from docs/round5-drop-manifest.md first. Each test ends by running it
@@ -72,6 +73,11 @@ public class AccountNameStampTests : IAsyncLifetime
         """;
 
     private const string NoOldColumns = "-|-|-|-|-|-|-|-|-|-|-|-|-|-";
+
+    // The roster name of every membership, NULL shown as "-".
+    private const string RosterNamesSql = """
+        SELECT "Id"::text || '=' || coalesce("CharacterName", '-') AS "Value" FROM "AppUserLinkshells" ORDER BY "Id"
+        """;
 
     private readonly PostgresFixture _pg;
     private int _linkshellId;
@@ -216,7 +222,8 @@ public class AccountNameStampTests : IAsyncLifetime
         Assert.Equal(("Bob", "Bobby", "Bobalt"), await NamesAsync("real"));
         await using (var check = _pg.CreateContext())
         {
-            Assert.Equal("Bob", (await check.AppUserLinkshells.AsNoTracking().SingleAsync()).CharacterName);
+            // The moved roster row keeps its old roster name (the placeholder's main); nothing reads it.
+            Assert.Equal("Bobby", (await check.AppUserLinkshells.AsNoTracking().SingleAsync()).CharacterName);
             Assert.False(await check.Characters.AnyAsync(c => c.AppUserId == "ph"));
             Assert.False(await check.Users.AnyAsync(u => u.Id == "ph"));
         }
@@ -419,10 +426,10 @@ public class AccountNameStampTests : IAsyncLifetime
         await AssertTheRefillMakesTheCopiesExactAsync();
     }
 
-    // A new membership gets the account's main as saved in the database, even when the context that
-    // adds it loaded the account before another request renamed the main.
+    // A new membership gets no roster name, and the context that adds it (which loaded the account
+    // before another request renamed the main) does not write its old CharacterName back.
     [Fact]
-    public async Task ANewMembership_FromAStaleContext_GetsTheSavedMain()
+    public async Task ANewMembership_FromAStaleContext_GetsNoRosterName()
     {
         await AddMemberAsync("me", "Mine", null, null, linkshellId: null);
         var before = await AsTheR55BuildLeftItAsync();
@@ -440,6 +447,12 @@ public class AccountNameStampTests : IAsyncLifetime
         await stale.SaveChangesAsync();
 
         await AssertStampedAsync(before);
+        await using (var check = _pg.CreateContext())
+        {
+            var link = await check.AppUserLinkshells.AsNoTracking().Include(l => l.AppUser).SingleAsync();
+            Assert.Null(link.CharacterName);
+            Assert.Equal("Newmain", link.AppUser!.CharacterName);
+        }
 
         await AssertTheRefillMakesTheCopiesExactAsync();
     }
@@ -469,23 +482,23 @@ public class AccountNameStampTests : IAsyncLifetime
         await db.SaveChangesAsync();
     }
 
-    // The old columns as the R5.5 build leaves them (an exact copy of Characters, which is what the
-    // refill writes), returned so the test can check nothing writes them after.
-    private async Task<List<string>> AsTheR55BuildLeftItAsync()
+    // The old columns and roster names as the R5.5 build leaves them (an exact copy of Characters,
+    // which is what the refill writes), returned so the test can check nothing writes them after.
+    private async Task<Snapshot> AsTheR55BuildLeftItAsync()
     {
         await using (var db = _pg.CreateContext())
         {
             await db.Database.ExecuteSqlRawAsync(MirrorRefillSql);
             Assert.True((await AccountNameMirrorCounts.CountAsync(db, CancellationToken.None)).AllMatch);
         }
-        return await OldColumnsAsync();
+        await using var check = _pg.CreateContext();
+        return new Snapshot(
+            await check.Database.SqlQueryRaw<string>(OldColumnsSql).ToListAsync(),
+            await check.Database.SqlQueryRaw<string>(RosterNamesSql).ToListAsync());
     }
 
-    private async Task<List<string>> OldColumnsAsync()
-    {
-        await using var db = _pg.CreateContext();
-        return await db.Database.SqlQueryRaw<string>(OldColumnsSql).ToListAsync();
-    }
+    // Each line is "<id>=<values>".
+    private sealed record Snapshot(List<string> OldColumns, List<string> RosterNames);
 
     private async Task<(string?, string?, string?)> NamesAsync(string id)
     {
@@ -505,20 +518,23 @@ public class AccountNameStampTests : IAsyncLifetime
         return string.Join("|", Show(0), Show(1), Show(2));
     }
 
-    // CharacterName is the main's name and every roster name the account's main; the old columns of
-    // every account in `before` are as they were, and an account made since has none.
-    private async Task AssertStampedAsync(List<string> before)
+    // CharacterName is the main's name. The old columns of every account and the roster name of every
+    // membership in `before` are as they were; an account or membership made since has none.
+    private async Task AssertStampedAsync(Snapshot before)
     {
         await using var db = _pg.CreateContext();
-        var counts = await AccountNameMirrorCounts.CountAsync(db, CancellationToken.None);
-        Assert.Equal(0, counts.Mains);
-        Assert.Equal(0, counts.RosterNames);
+        Assert.Equal(0, (await AccountNameMirrorCounts.CountAsync(db, CancellationToken.None)).Mains);
+        AssertUnchanged(before.OldColumns, await db.Database.SqlQueryRaw<string>(OldColumnsSql).ToListAsync(), NoOldColumns);
+        AssertUnchanged(before.RosterNames, await db.Database.SqlQueryRaw<string>(RosterNamesSql).ToListAsync(), "-");
+    }
 
+    private static void AssertUnchanged(List<string> before, List<string> now, string empty)
+    {
         var previous = before.ToDictionary(line => line[..line.IndexOf('=')], StringComparer.Ordinal);
-        foreach (var line in await db.Database.SqlQueryRaw<string>(OldColumnsSql).ToListAsync())
+        foreach (var line in now)
         {
             var id = line[..line.IndexOf('=')];
-            Assert.Equal(previous.TryGetValue(id, out var was) ? was : id + "=" + NoOldColumns, line);
+            Assert.Equal(previous.TryGetValue(id, out var was) ? was : id + "=" + empty, line);
         }
     }
 

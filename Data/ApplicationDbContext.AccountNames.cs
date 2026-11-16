@@ -6,16 +6,13 @@ using Microsoft.EntityFrameworkCore.ChangeTracking;
 namespace LinkshellManagerDiscordApp.Data
 {
     // Round 5: Characters is the only place names, jobs and crafts are written (CharacterWriter).
-    // Every save then copies the result onto the places that still hold a copy:
+    // Every save then copies the main's (slot 0) name onto AppUser.CharacterName, the account's
+    // display name (null when the account has no main). Derived, the same way Rank follows the role.
     //
-    // 1. AppUser.CharacterName, the account's display name: always the main's (slot 0) name, or null
-    //    when the account has no main. Derived, the same way Rank follows the role.
-    // 2. The roster name, AppUserLinkshell.CharacterName: nothing reads it any more, but the build
-    //    before still does, so every new membership, every membership that changes account, and every
-    //    membership of an account whose main is renamed gets the account's main name.
-    //
-    // The old AspNetUsers alt, job and craft columns are NOT copied to any more (R5.6): the previous
-    // build (R5.5) never reads them, and R5.7 drops them. They keep whatever R5.5 last wrote.
+    // Nothing else is copied to any more (R5.6): not the old AspNetUsers alt, job and craft columns,
+    // and not the roster name (AppUserLinkshell.CharacterName). The previous build (R5.5) reads
+    // neither, and R5.7 drops them. They keep whatever R5.5 last wrote; a membership made since has
+    // no roster name.
     //
     // Only accounts whose Characters rows change in the save are copied to (their other rows are read
     // from the database). No SQL is run after the save: everything is part of the save itself.
@@ -67,7 +64,6 @@ namespace LinkshellManagerDiscordApp.Data
             accountIds.RemoveWhere(id => userEntries.TryGetValue(id, out var user) && user.State == EntityState.Deleted);
             RevertCopiesChangedByHand(userEntries, accountIds);
 
-            var renamedAccounts = new HashSet<string>(StringComparer.Ordinal);
             if (accountIds.Count > 0)
             {
                 foreach (var entry in characterEntries.Where(entry => entry.State is EntityState.Added or EntityState.Modified))
@@ -92,20 +88,14 @@ namespace LinkshellManagerDiscordApp.Data
                     {
                         continue;
                     }
-                    var rows = CharactersNow(id, saved, characterEntries);
-                    if (StampMainName(account, rows))
-                    {
-                        renamedAccounts.Add(id);
-                    }
+                    StampMainName(account, CharactersNow(id, saved, characterEntries));
                 }
             }
-
-            await StampRosterNamesAsync(renamedAccounts, accountIds, userEntries, async, cancellationToken);
         }
 
-        // A changed row: the name trimmed (and never blank or too long, see CharacterWriter), NormalizedName
-        // from it, and UpdatedAt now. A refusal is a DbUpdateException, so callers that show save
-        // errors (Data Admin) show it as one.
+        // A changed row: the name trimmed (and never blank or too long, see CharacterWriter),
+        // NormalizedName from it, and UpdatedAt now. A refusal is a DbUpdateException, so callers that
+        // show save errors (Data Admin) show it as one.
         private static void StampCharacterRow(EntityEntry<Character> entry)
         {
             var name = CharacterWriter.Clean(entry.Entity.Name);
@@ -182,94 +172,15 @@ namespace LinkshellManagerDiscordApp.Data
 
         // Sets the account's CharacterName to its main's (slot 0) name, or null. Written even when it
         // looks unchanged, so the database ends up equal to Characters even if this context's copy of
-        // the account was read before someone else's save. Returns whether the main's name changed.
-        private static bool StampMainName(EntityEntry<AppUser> account, List<Character> rows)
+        // the account was read before someone else's save.
+        private static void StampMainName(EntityEntry<AppUser> account, List<Character> rows)
         {
             var main = rows.Where(row => row.Slot == Character.MainSlot).OrderBy(row => row.Id).FirstOrDefault();
             var property = account.Property(MainNameColumn);
-            var oldMain = account.State == EntityState.Added ? null : property.OriginalValue as string;
             property.CurrentValue = main?.Name;
             if (account.State != EntityState.Added)
             {
                 property.IsModified = true;
-            }
-            return account.State != EntityState.Added && !string.Equals(oldMain, main?.Name, StringComparison.Ordinal);
-        }
-
-        // The roster name (see the top of this file): new memberships, memberships moved to another
-        // account (a placeholder claim), memberships whose roster name someone set by hand, and every
-        // membership of an account whose main was renamed in this save.
-        // The main's name comes from this context only for an account it is creating or whose
-        // characters this save copied (copiedAccounts); any other account's is read from the
-        // database, as this context's copy of it may be older than another request's rename.
-        private async Task StampRosterNamesAsync(
-            HashSet<string> renamedAccounts,
-            HashSet<string> copiedAccounts,
-            Dictionary<string, EntityEntry<AppUser>> userEntries,
-            bool async,
-            CancellationToken cancellationToken)
-        {
-#pragma warning disable CS0618 // Round 5: the roster name is written only here, as a copy of the main.
-            const string rosterName = nameof(AppUserLinkshell.CharacterName);
-#pragma warning restore CS0618
-            var memberships = ChangeTracker.Entries<AppUserLinkshell>()
-                .Where(entry => entry.State == EntityState.Added
-                    || (entry.State == EntityState.Modified
-                        && (entry.Property(nameof(AppUserLinkshell.AppUserId)).IsModified
-                            || entry.Property(rosterName).IsModified)))
-                .ToList();
-            if (renamedAccounts.Count > 0)
-            {
-                var renamed = renamedAccounts.ToList();
-                var seen = memberships.Select(entry => entry.Entity).ToHashSet(ReferenceEqualityComparer.Instance);
-                foreach (var link in await ListAsync(
-                             AppUserLinkshells.Where(link => link.AppUserId != null && renamed.Contains(link.AppUserId)),
-                             async, cancellationToken))
-                {
-                    var entry = Entry(link);
-                    if (entry.State != EntityState.Deleted && seen.Add(link))
-                    {
-                        memberships.Add(entry);
-                    }
-                }
-            }
-            if (memberships.Count == 0)
-            {
-                return;
-            }
-
-            var mains = new Dictionary<string, string?>(StringComparer.Ordinal);
-            var unknown = new List<string>();
-            foreach (var id in memberships.Select(entry => entry.Entity.AppUserId).OfType<string>().Distinct(StringComparer.Ordinal))
-            {
-                if (userEntries.TryGetValue(id, out var account)
-                    && (account.State == EntityState.Added
-                        || (account.State != EntityState.Deleted && copiedAccounts.Contains(id))))
-                {
-                    mains[id] = account.Entity.CharacterName;
-                }
-                else
-                {
-                    unknown.Add(id);
-                }
-            }
-            if (unknown.Count > 0)
-            {
-                var query = Users.AsNoTracking()
-                    .Where(user => unknown.Contains(user.Id))
-                    .Select(user => new { user.Id, user.CharacterName });
-                foreach (var row in async ? await query.ToListAsync(cancellationToken) : query.ToList())
-                {
-                    mains[row.Id] = row.CharacterName;
-                }
-            }
-
-            foreach (var entry in memberships)
-            {
-                if (entry.Entity.AppUserId is { } id && mains.TryGetValue(id, out var main))
-                {
-                    SetDerived(entry, rosterName, main);
-                }
             }
         }
 

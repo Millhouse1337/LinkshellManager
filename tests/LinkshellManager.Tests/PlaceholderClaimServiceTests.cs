@@ -71,13 +71,14 @@ public class PlaceholderClaimServiceTests
         Assert.Null(db.Users.Find(Ph));
         // The real account had no alts: the placeholder's main takes the first empty alt slot and its
         // alt the next (owner decision 2, Round 5), so both names still find this account. The moved
-        // roster row takes the real account's main.
+        // roster row keeps the roster name it had (nothing writes or reads it since R5.6); the roster
+        // shows the real account's main.
         var real = db.Users.Find(Real)!;
         Assert.Equal("Bob", real.CharacterName);
         Assert.Equal(new[] { "Bob", "Bobalt", "Bobthree" },
             db.Characters.AsNoTracking().Where(c => c.AppUserId == Real).OrderBy(c => c.Slot).Select(c => c.Name).ToArray());
         Assert.Empty(result.NamesNotKept);
-        Assert.Equal("Bob", member.CharacterName);
+        Assert.Equal("Bobalt", member.CharacterName);
 
         var rows = db.DkpLedgerEntries.ToList();
         Assert.All(rows, r => Assert.Equal(Real, r.AppUserId));

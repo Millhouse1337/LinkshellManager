@@ -195,7 +195,9 @@ public class CharacterNameLookupParityTests : IAsyncLifetime
             }
             db.AppUserLinkshells.Add(new AppUserLinkshell
             {
-                Linkshell = linkshell, AppUserId = member.Id, CharacterName = member.Id is null ? Ghost : member.Main,
+                // The roster name as the R5.5 build stamped it: the account's main, trimmed (nothing
+                // writes it since R5.6, so it is seeded here as production holds it).
+                Linkshell = linkshell, AppUserId = member.Id, CharacterName = member.Id is null ? Ghost : CharacterWriter.Clean(member.Main),
             });
         }
         db.Users.Add(new AppUser { Id = Elsewhere, UserName = Elsewhere, CharacterName = "Bob", AltCharacterName1 = "Zed" });

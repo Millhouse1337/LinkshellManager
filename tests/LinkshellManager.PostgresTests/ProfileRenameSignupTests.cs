@@ -64,9 +64,11 @@ public class ProfileRenameSignupTests : IAsyncLifetime
         Assert.True(fourth.Succeeded, string.Join("; ", fourth.Errors.Select(e => e.Description)));
         Assert.Equal("Altnew", await ParticipationNameAsync(seeded.OnAlt));
 
-        // The roster name is still written as a copy of the main.
+        // Since R5.6 the roster name is not written: it keeps what it was seeded with. The account's
+        // CharacterName follows the main.
         await using var check = _pg.CreateContext();
-        Assert.Equal("Altnew", (await check.AppUserLinkshells.AsNoTracking().SingleAsync(l => l.AppUserId == "me")).CharacterName);
+        var link = await check.AppUserLinkshells.AsNoTracking().Include(l => l.AppUser).SingleAsync(l => l.AppUserId == "me");
+        Assert.Equal(("Mine", "Altnew"), (link.CharacterName, link.AppUser!.CharacterName));
     }
 
     // The old rule's other half: an open sign-up with no name at all still takes the main's.

@@ -16,8 +16,9 @@ namespace LinkshellManager.Tests;
 
 // Round 5: the addon's self-name backfill (an attendance post that says which character the token
 // owner is logged in as) writes the owner's main through CharacterWriter when the account has none.
-// The save copies it onto the account's CharacterName and its roster name, exactly as every other
-// writer (AccountNameStampTests covers the others on Postgres). The old alt columns are not written.
+// The save copies it onto the account's CharacterName, exactly as every other writer
+// (AccountNameStampTests covers the others on Postgres). The old alt columns and the roster name are
+// not written.
 public class AddonSelfNameBackfillTests
 {
     private const int Ls = 7;
@@ -77,7 +78,7 @@ public class AddonSelfNameBackfillTests
             CancellationToken.None);
 
     [Fact]
-    public async Task AnOwnerWithNoMain_GetsTheLoggedInCharacterAsMain_CopiedEverywhere()
+    public async Task AnOwnerWithNoMain_GetsTheLoggedInCharacterAsMain_CopiedToTheAccount()
     {
         await using var db = Seeded(alt: "Myalt");
 
@@ -89,7 +90,8 @@ public class AddonSelfNameBackfillTests
         Assert.Equal("Selfy", me.CharacterName);
         // Since R5.6 the old alt columns are not written.
         Assert.Equal(((string?)null, (string?)null), (me.AltCharacterName1, me.AltCharacterName2));
-        Assert.Equal("Selfy", (await db.AppUserLinkshells.AsNoTracking().SingleAsync()).CharacterName);
+        // Nor the roster name.
+        Assert.Null((await db.AppUserLinkshells.AsNoTracking().SingleAsync()).CharacterName);
         // The attendance went to the owner.
         Assert.Equal("me", (await db.AppUserEvents.AsNoTracking().SingleAsync()).AppUserId);
     }

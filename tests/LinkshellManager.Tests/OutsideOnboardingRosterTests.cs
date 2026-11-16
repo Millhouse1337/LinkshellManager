@@ -76,7 +76,8 @@ public class OutsideOnboardingRosterTests
         var member = Assert.Single(db.AppUserLinkshells.Include(m => m.AppUser));
         Assert.Equal(result.AppUserId, member.AppUserId);
         Assert.Equal(Ls, member.LinkshellId);
-        Assert.Equal("Millhouse", member.CharacterName);
+        // Since R5.6 no roster name is written: the roster shows the account's main (below).
+        Assert.Null(member.CharacterName);
         Assert.Equal(LinkshellRanks.Member, member.Rank);
         Assert.Equal("Active", member.Status);
         Assert.Equal(0, member.LinkshellDkp);
