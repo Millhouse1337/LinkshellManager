@@ -285,7 +285,7 @@ public class CharactersBecomeSourceRoundTripTests
     private static async Task AssertMirrorExactAsync(string connectionString)
     {
         await using var db = SchemaTestDatabase.CreateContext(connectionString);
-        Assert.Equal(new AccountNameMirrorCheck.Result(0, 0, 0), await AccountNameMirrorCheck.CountAsync(db, CancellationToken.None));
+        Assert.Equal(new AccountNameMirrorCounts.Result(0, 0, 0), await AccountNameMirrorCounts.CountAsync(db, CancellationToken.None));
 
         // Every one of the 15 old columns is an EXACT copy of its slot's row (null with no row).
         Assert.Equal(new[] { "0" }, await QueryAsync(connectionString, """

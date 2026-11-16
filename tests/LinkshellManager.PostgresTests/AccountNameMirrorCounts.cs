@@ -1,24 +1,25 @@
+using System.Threading;
+using System.Threading.Tasks;
+using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
 using Microsoft.EntityFrameworkCore;
 
-namespace LinkshellManagerDiscordApp.Data;
+namespace LinkshellManager.PostgresTests;
 
-// A read-only start-up check (Round 5, R5.5): do the account's copies of its characters still match
-// Characters, the only written source?
-//
-// The build before the name switch reads the old account columns and the roster names, and copies
-// the account columns INTO Characters at start-up and on every save. Rolling back to it is safe only
-// while those copies match: the save hook (ApplicationDbContext.StampAccountsFromCharactersAsync)
-// keeps them so. This counts what does not match and Program.cs logs a Warning when anything does.
-// It changes nothing.
+// The start-up mirror check of the R5.5 build (Data/AccountNameMirrorCheck.cs at 1adf6d6), kept here
+// for the tests only. R5.6 stopped copying Characters onto the old account columns and the roster
+// names, so the app no longer counts them at start-up. The tests still use the counts where the
+// copies must be exact:
+// - CharactersBecomeSourceRoundTripTests: that migration makes them exact;
+// - the R5.6 "mirror refill" SQL (docs/round5-drop-manifest.md) makes them exact again.
 //
 // Three counts:
 // - Accounts: accounts whose old columns would give different Characters rows than they have (by
-//   the old build's own copy rules: trimmed, blank and over-256 names left out, a repeated name kept
-//   in its first slot). This is the pre-check's A7 query.
+//   the R5.4 build's own copy rules: trimmed, blank and over-256 names left out, a repeated name
+//   kept in its first slot). This is the pre-check's A7 query.
 // - Mains: accounts whose CharacterName is not exactly their main's (slot 0) name.
 // - Roster names: memberships whose roster name is not exactly their account's CharacterName.
-public static class AccountNameMirrorCheck
+internal static class AccountNameMirrorCounts
 {
     public sealed record Result(int Accounts, int Mains, int RosterNames)
     {
@@ -27,7 +28,7 @@ public static class AccountNameMirrorCheck
 
     private const string Ws = TodDerivedSql.WhitespaceChars;
 
-    internal static readonly string AccountsSql = $"""
+    private static readonly string AccountsSql = $"""
         WITH slots AS (
             SELECT u."Id" AS account, s.slot::smallint AS slot,
                    regexp_replace(s.nm, '^[{Ws}]+|[{Ws}]+$', '', 'g') AS nm,
@@ -55,32 +56,25 @@ public static class AccountNameMirrorCheck
               IS DISTINCT FROM (d.nm, lower(d.nm), d.jl, d.sj, d.mj, d.cl)
         """;
 
-    internal const string MainsSql = """
+    private const string MainsSql = """
         SELECT count(*)::int AS "Value"
         FROM "AspNetUsers" u
         LEFT JOIN "Characters" c ON c."AppUserId" = u."Id" AND c."Slot" = 0
         WHERE u."CharacterName" IS DISTINCT FROM c."Name"
         """;
 
-    internal const string RosterNamesSql = """
+    private const string RosterNamesSql = """
         SELECT count(*)::int AS "Value"
         FROM "AppUserLinkshells" m
         JOIN "AspNetUsers" u ON u."Id" = m."AppUserId"
         WHERE m."CharacterName" IS DISTINCT FROM u."CharacterName"
         """;
 
-    // All zero on a database without SQL (the InMemory tests): the save hook is the whole story there.
-    public static async Task<Result> CountAsync(ApplicationDbContext db, CancellationToken cancellationToken)
-    {
-        if (!db.Database.IsRelational())
-        {
-            return new Result(0, 0, 0);
-        }
-        return new Result(
+    public static async Task<Result> CountAsync(ApplicationDbContext db, CancellationToken cancellationToken) =>
+        new Result(
             await CountAsync(db, AccountsSql, cancellationToken),
             await CountAsync(db, MainsSql, cancellationToken),
             await CountAsync(db, RosterNamesSql, cancellationToken));
-    }
 
     private static Task<int> CountAsync(ApplicationDbContext db, string sql, CancellationToken cancellationToken) =>
         db.Database.SqlQueryRaw<int>(sql).SingleAsync(cancellationToken);

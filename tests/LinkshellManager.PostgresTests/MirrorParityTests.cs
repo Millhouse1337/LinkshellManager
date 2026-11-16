@@ -30,7 +30,7 @@ namespace LinkshellManager.PostgresTests;
 // EVERY writer path of this build:
 // - the pre-check's A7 query finds no account whose columns differ from Characters, CharacterName is
 //   exactly the main's name, and every roster name is exactly its account's main
-//   (AccountNameMirrorCheck, which start-up runs too);
+//   (AccountNameMirrorCounts, the R5.5 start-up check);
 // - the account columns are an EXACT copy of Characters (not just equal after trimming);
 // - the old build's own copy (PreviousBuildCharacterCopy, frozen from 603439d) changes no row.
 //
@@ -268,7 +268,7 @@ public class MirrorParityTests : IAsyncLifetime
         await AddMemberAsync("me", "Mine", "Altone", null);
         await AddMemberAsync("you", "Yours", null, null);
         await using var db = _pg.CreateContext();
-        Assert.True((await AccountNameMirrorCheck.CountAsync(db, CancellationToken.None)).AllMatch);
+        Assert.True((await AccountNameMirrorCounts.CountAsync(db, CancellationToken.None)).AllMatch);
 
         await db.Database.ExecuteSqlRawAsync("UPDATE \"AspNetUsers\" SET \"AltCharacterName1\" = 'Changed' WHERE \"Id\" = 'me'");
         await db.Database.ExecuteSqlRawAsync("UPDATE \"AspNetUsers\" SET \"CharacterName\" = ' Yours ' WHERE \"Id\" = 'you'");
@@ -276,7 +276,7 @@ public class MirrorParityTests : IAsyncLifetime
 
         // ' Yours ' still copies to the same row (A7 trims), but it is not exactly the main's name, and
         // its roster name no longer equals it either: two roster names differ.
-        Assert.Equal(new AccountNameMirrorCheck.Result(1, 1, 2), await AccountNameMirrorCheck.CountAsync(db, CancellationToken.None));
+        Assert.Equal(new AccountNameMirrorCounts.Result(1, 1, 2), await AccountNameMirrorCounts.CountAsync(db, CancellationToken.None));
     }
 
     // A request that loaded the characters before another request renamed one (the addon job post
@@ -385,7 +385,7 @@ public class MirrorParityTests : IAsyncLifetime
         await using var db = _pg.CreateContext();
 
         // 1. The start-up check (A7, the main, the roster names).
-        Assert.Equal(new AccountNameMirrorCheck.Result(0, 0, 0), await AccountNameMirrorCheck.CountAsync(db, CancellationToken.None));
+        Assert.Equal(new AccountNameMirrorCounts.Result(0, 0, 0), await AccountNameMirrorCounts.CountAsync(db, CancellationToken.None));
 
         // 2. The account columns are an exact copy of the three slots.
         var characters = await db.Characters.AsNoTracking().ToListAsync();

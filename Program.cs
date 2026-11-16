@@ -667,32 +667,6 @@ if (!app.Environment.IsDevelopment())
             services.GetRequiredService<ILogger<Program>>()
                 .LogWarning(ex, "SpawnKey refill: could not run; start-up continues.");
         }
-
-        // Characters is the only written source of names (Round 5, R5.5); every save copies it onto
-        // the account columns and roster names the previous build still reads. Read-only: count what
-        // does not match, so a rollback is never made on a database where it would lose a change.
-        // Never stops start-up.
-        try
-        {
-            var mirror = await AccountNameMirrorCheck.CountAsync(
-                services.GetRequiredService<ApplicationDbContext>(), CancellationToken.None);
-            var log = services.GetRequiredService<ILogger<Program>>();
-            if (mirror.AllMatch)
-            {
-                log.LogInformation("Name copies: the account columns and roster names match Characters.");
-            }
-            else
-            {
-                log.LogWarning(
-                    "Characters mirror: {Accounts} account(s) whose old name/job columns differ from Characters, {Mains} whose CharacterName is not their main's name, {RosterNames} roster name(s) that differ from the account's main. Do not roll back to the build before the name switch until this is 0.",
-                    mirror.Accounts, mirror.Mains, mirror.RosterNames);
-            }
-        }
-        catch (Exception ex)
-        {
-            services.GetRequiredService<ILogger<Program>>()
-                .LogWarning(ex, "Characters mirror: the start-up check could not run; start-up continues.");
-        }
     }
 }
 
