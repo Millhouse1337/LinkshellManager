@@ -254,7 +254,7 @@ public sealed partial class ActivityEventsController
             AssignedMonsterName = IsHnmPartySetupType(normalizedEventType) ? NormalizeMonster(request.AssignedMonsterName) : null,
             Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim(),
             CreatedByAppUserId = appUser.Id,
-            CreatedByCharacterName = membership!.CharacterName,
+            CreatedByCharacterName = appUser.CharacterName,
             CreatedAt = now,
             UpdatedAt = now,
             Alliances = BuildPartyTreeFromFlat(request.Slots)

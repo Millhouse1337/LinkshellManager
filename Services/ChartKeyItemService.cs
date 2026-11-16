@@ -206,7 +206,7 @@ public sealed class ChartKeyItemService
         var member = await _db.AppUserLinkshells
             .AsNoTracking()
             .Where(link => link.LinkshellId == linkshellId && link.Id == membershipId)
-            .Select(link => new { link.CharacterName, link.AppUserId })
+            .Select(link => new { link.AppUser!.CharacterName, link.AppUserId })
             .FirstOrDefaultAsync(cancellationToken);
 
         if (member is null || string.IsNullOrWhiteSpace(member.CharacterName))

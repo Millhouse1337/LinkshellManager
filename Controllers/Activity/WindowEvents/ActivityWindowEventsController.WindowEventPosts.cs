@@ -32,11 +32,10 @@ public sealed partial class ActivityWindowEventsController
             .AsNoTracking()
             .Include(link => link.AppUser)
             .Where(link => link.LinkshellId == linkshellId && link.AppUserId != null)
-            .OrderBy(link => link.CharacterName)
-            .ThenBy(link => link.AppUser!.CharacterName)
+            .OrderBy(link => link.AppUser!.CharacterName)
             .Select(link => new ActivityEventAddMemberCandidateDto(
                 link.AppUserId!,
-                link.CharacterName ?? link.AppUser!.CharacterName ?? link.AppUser!.UserName ?? "Unknown member",
+                link.AppUser!.CharacterName ?? link.AppUser!.UserName ?? "Unknown member",
                 link.Rank))
             .ToListAsync(cancellationToken);
         return Ok(candidates);
@@ -102,11 +101,7 @@ public sealed partial class ActivityWindowEventsController
         var perMember = Math.Max(0d, dkpAmount ?? linkshell?.HnmStandardMiscBonus ?? 0d);
 
         var actor = await ResolveAppUserAsync(cancellationToken);
-        var actorMembership = actor is null
-            ? null
-            : await _dbContext.AppUserLinkshells.AsNoTracking()
-                .FirstOrDefaultAsync(m => m.AppUserId == actor.Id && m.LinkshellId == windowEvent.LinkshellId, cancellationToken);
-        var actorName = (actorMembership?.CharacterName ?? actor?.CharacterName ?? actor?.UserName ?? "officer").Trim();
+        var actorName = (actor?.CharacterName ?? actor?.UserName ?? "officer").Trim();
 
         var nowUtc = DateTime.UtcNow;
         var snapshot = new AttendanceSnapshot
@@ -130,7 +125,7 @@ public sealed partial class ActivityWindowEventsController
             snapshot.Entries.Add(new AttendanceSnapshotEntry
             {
                 Snapshot = snapshot,
-                CharacterName = (membership.CharacterName ?? membership.AppUser?.CharacterName
+                CharacterName = (membership.AppUser?.CharacterName
                     ?? membership.AppUser?.UserName ?? "Unknown member").Trim(),
                 AppUserId = membership.AppUserId,
                 AddedManually = true,

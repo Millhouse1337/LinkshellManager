@@ -52,7 +52,7 @@ public sealed partial class ActivityEventsController
         if (membership is null) return Forbid();
         if (string.IsNullOrWhiteSpace(request.Body)) return BadRequest(new { error = "Write something first." });
 
-        var character = membership.CharacterName ?? appUser.CharacterName;
+        var character = appUser.CharacterName;
         var service = HttpContext.RequestServices.GetRequiredService<EventCommentService>();
         var comment = await service.AddAsync(id, appUser.Id, character, request.Body, request.IsAnonymous, cancellationToken);
         return comment is null

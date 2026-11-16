@@ -84,7 +84,8 @@ public static class AuctionBidService
             return Fail("This auction has already ended.");
         }
 
-        var characterName = membership.CharacterName ?? characterNameFallback;
+        // The bidder's name: the account's main, else the name the caller passed.
+        var characterName = await AccountCharacters.MainNameAsync(db, membership, cancellationToken) ?? characterNameFallback;
         return await CommitBidAsync(
             db, dkpPools, dkpPoolBalances, appUserId, characterName,
             item.Auction.LinkshellId, itemId, bidAmount, now, cancellationToken);

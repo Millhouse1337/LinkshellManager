@@ -59,11 +59,14 @@ public sealed class DkpSheetService
             : new List<DkpSheetPoolColumn>();
         var poolTotals = new double[poolColumns.Count];
 
+        // The members' alts, from Characters.
+        var characters = await AccountCharacters.LoadForLinkshellAsync(_db, linkshellId, cancellationToken);
         var rows = new List<DkpSheetMemberRow>(members.Count);
         double sumBiddable = 0, sumEarned = 0, sumSpent = 0;
         foreach (var m in members)
         {
-            var name = m.CharacterName ?? m.AppUser?.CharacterName ?? m.AppUser?.UserName ?? "Unknown";
+            var name = m.AppUser?.CharacterName ?? m.AppUser?.UserName ?? "Unknown";
+            var own = AccountCharacters.For(characters, m.AppUserId);
             var current = DkpRounding.Round(m.LinkshellDkp ?? 0, step);
             var biddableRaw = m.AppUserId is not null
                 ? biddableByUser.GetValueOrDefault(m.AppUserId, m.LinkshellDkp ?? 0)
@@ -98,8 +101,8 @@ public sealed class DkpSheetService
             rows.Add(new DkpSheetMemberRow(
                 m.Id,
                 name,
-                m.AppUser?.AltCharacterName1 ?? string.Empty,
-                m.AppUser?.AltCharacterName2 ?? string.Empty,
+                AccountCharacters.Alt1(own)?.Name ?? string.Empty,
+                AccountCharacters.Alt2(own)?.Name ?? string.Empty,
                 current, biddable, earned, spent,
                 poolCurrent));
         }

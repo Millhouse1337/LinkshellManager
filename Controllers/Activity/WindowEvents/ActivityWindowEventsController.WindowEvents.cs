@@ -310,9 +310,9 @@ public sealed partial class ActivityWindowEventsController
             ? await _dbContext.AppUserLinkshells
                 .AsNoTracking()
                 .Where(link => link.LinkshellId == linkshellId
-                               && link.CharacterName != null
-                               && link.CharacterName != "")
-                .Select(link => link.CharacterName!)
+                               && link.AppUser!.CharacterName != null
+                               && link.AppUser!.CharacterName != "")
+                .Select(link => link.AppUser!.CharacterName!)
                 .Distinct()
                 .OrderBy(name => name)
                 .ToListAsync(cancellationToken)

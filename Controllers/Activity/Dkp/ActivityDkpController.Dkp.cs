@@ -72,8 +72,9 @@ public sealed partial class ActivityDkpController
         // camp twice. Posting a camp (PostWindowEventToSheetAsync) is the only place it pays out.
 
         var linkshellMembers = await _dbContext.AppUserLinkshells
+            .Include(link => link.AppUser)
             .Where(link => link.LinkshellId == selectedLinkshellId && link.AppUserId != null)
-            .OrderBy(link => link.CharacterName)
+            .OrderBy(link => link.AppUser!.CharacterName)
             .AsNoTracking()
             .ToListAsync(cancellationToken);
 
@@ -87,7 +88,7 @@ public sealed partial class ActivityDkpController
             .Where(link => !string.IsNullOrWhiteSpace(link.AppUserId))
             .Select(link => new ActivityDkpHistoryMemberDto(
                 link.AppUserId!,
-                link.CharacterName ?? "Unknown member",
+                link.AppUser?.CharacterName ?? "Unknown member",
                 link.LinkshellDkp ?? 0,
                 pendingLootByUser.GetValueOrDefault(link.AppUserId!)))
             .ToList();
@@ -213,6 +214,7 @@ public sealed partial class ActivityDkpController
         }
 
         var targetMembership = await _dbContext.AppUserLinkshells
+            .Include(link => link.AppUser)
             .FirstOrDefaultAsync(link =>
                 link.LinkshellId == request.LinkshellId &&
                 link.AppUserId == request.TargetAppUserId,
@@ -269,7 +271,7 @@ public sealed partial class ActivityDkpController
                 ? DkpPoolRef.Pinned(original.DkpPoolId ?? poolMap.DefaultPoolId)
                 : DkpPoolRef.Derived(original.EventType);
             entryContext = new DkpEntryContext(
-                CharacterName: targetMembership.CharacterName,
+                CharacterName: targetMembership.AppUser?.CharacterName,
                 EventName: original.EventName,
                 EventType: original.EventType,
                 EventLocation: original.EventLocation,
@@ -339,7 +341,7 @@ public sealed partial class ActivityDkpController
             var poolEventType = WindowEventDkpLedgerService.PoolEventTypeFor(windowEvent);
             poolRef = DkpPoolRef.Derived(poolEventType);
             entryContext = new DkpEntryContext(
-                CharacterName: targetMembership.CharacterName,
+                CharacterName: targetMembership.AppUser?.CharacterName,
                 EventName: string.IsNullOrWhiteSpace(windowEvent.Name) ? "Window Event" : windowEvent.Name,
                 EventType: poolEventType,
                 EventLocation: primaryZone,
@@ -361,7 +363,7 @@ public sealed partial class ActivityDkpController
             }
             poolRef = DkpPoolRef.Pinned(miscPoolId);
             entryContext = new DkpEntryContext(
-                CharacterName: targetMembership.CharacterName,
+                CharacterName: targetMembership.AppUser?.CharacterName,
                 Details: $"Audit by {officerName}: {reason}");
         }
 

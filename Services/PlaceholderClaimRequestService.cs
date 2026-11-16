@@ -86,7 +86,7 @@ public sealed class PlaceholderClaimRequestService
                 {
                     request.Id,
                     MembershipId = member.Id,
-                    PlaceholderName = member.CharacterName ?? member.AppUser!.CharacterName,
+                    PlaceholderName = member.AppUser!.CharacterName,
                     member.LinkshellDkp,
                     request.RequesterName,
                     request.RequesterAppUserId,

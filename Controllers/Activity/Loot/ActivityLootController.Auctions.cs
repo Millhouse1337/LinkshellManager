@@ -764,6 +764,7 @@ public sealed partial class ActivityLootController
                      item.CurrentHighestBid.Value > 0))
         {
             var winnerMembership = await _dbContext.AppUserLinkshells
+                .Include(link => link.AppUser)
                 .FirstOrDefaultAsync(link =>
                     link.AppUserId == item.CurrentHighestBidderAppUserId &&
                     link.LinkshellId == auction.LinkshellId,
@@ -782,7 +783,7 @@ public sealed partial class ActivityLootController
                 closedAt,
                 DkpPoolRef.Pinned(auctionPoolId),
                 new DkpEntryContext(
-                    CharacterName: winnerMembership.CharacterName,
+                    CharacterName: winnerMembership.AppUser?.CharacterName,
                     EventName: auction.AuctionTitle,
                     ItemName: item.ItemName,
                     Details: $"Auction spend from {auction.AuctionTitle ?? "auction"}."),
@@ -806,9 +807,9 @@ public sealed partial class ActivityLootController
                         TreasuryTransactionKinds.PaidGilToMember,
                         item.GilAmount.Value,
                         closedAt,
-                        Memo: $"Gil auction: {item.ItemName} won by {winnerMembership.CharacterName} for {winningBid} DKP.",
+                        Memo: $"Gil auction: {item.ItemName} won by {winnerMembership.AppUser?.CharacterName} for {winningBid} DKP.",
                         CounterpartyAppUserId: winnerMembership.AppUserId,
-                        CounterpartyCharacterName: winnerMembership.CharacterName,
+                        CounterpartyCharacterName: winnerMembership.AppUser?.CharacterName,
                         Source: JournalEntrySources.GilAuction),
                     new TreasuryActor(appUser.Id, appUser.CharacterName),
                     cancellationToken);

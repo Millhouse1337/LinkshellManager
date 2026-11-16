@@ -101,6 +101,10 @@ public sealed class DkpLedgerWriter
     // Hybrid item in an event sees the first item's debit.
     private readonly Dictionary<(int LinkshellId, string AppUserId, int PoolId), double> _stagedByPool = new();
 
+    // Account main names already read for snapshot columns (MemberNameAsync), so a payout that
+    // writes a row per member reads each account once.
+    private readonly Dictionary<string, string?> _mainNames = new(StringComparer.Ordinal);
+
     public DkpLedgerWriter(ApplicationDbContext db, DkpPoolResolver resolver, ILogger<DkpLedgerWriter> logger)
     {
         _db = db;
@@ -152,7 +156,7 @@ public sealed class DkpLedgerWriter
             if (-amount > available + OverdraftEpsilon)
             {
                 throw new DkpOverdraftException(
-                    $"{member.CharacterName ?? "That member"} has {available:0.##} DKP in this pool — "
+                    $"{await MemberNameAsync(member, cancellationToken) ?? "That member"} has {available:0.##} DKP in this pool — "
                     + $"a {-amount:0.##} DKP debit would overdraw it.");
             }
         }
@@ -167,7 +171,7 @@ public sealed class DkpLedgerWriter
             OccurredAt = occurredAtUtc,
             DkpPoolId = poolId,
             DkpPoolPinned = pinned,
-            CharacterName = context.CharacterName ?? member.CharacterName,
+            CharacterName = context.CharacterName ?? await MemberNameAsync(member, cancellationToken),
             EventName = context.EventName,
             EventType = context.EventType ?? pool.DerivedFromEventType,
             EventLocation = context.EventLocation,
@@ -225,7 +229,7 @@ public sealed class DkpLedgerWriter
             OccurredAt = occurredAtUtc,
             DkpPoolId = corrected.DkpPoolId,
             DkpPoolPinned = corrected.DkpPoolPinned,
-            CharacterName = corrected.CharacterName ?? member?.CharacterName,
+            CharacterName = corrected.CharacterName ?? await MemberNameAsync(member, cancellationToken),
             EventName = corrected.EventName,
             EventType = corrected.EventType,
             EventLocation = corrected.EventLocation,
@@ -430,5 +434,26 @@ public sealed class DkpLedgerWriter
         }
         var key = (linkshellId, appUserId, poolId);
         _stagedByPool[key] = _stagedByPool.GetValueOrDefault(key) + delta;
+    }
+
+    // The name a row records for its member when the caller gave none: the account's main
+    // (AccountCharacters.MainNameAsync). The roster name used to be copied here; it is only ever a
+    // copy of the main.
+    private async Task<string?> MemberNameAsync(AppUserLinkshell? member, CancellationToken cancellationToken)
+    {
+        if (member?.AppUserId is not { } appUserId)
+        {
+            return null;
+        }
+        if (member.AppUser is { } user)
+        {
+            return user.CharacterName;
+        }
+        if (!_mainNames.TryGetValue(appUserId, out var name))
+        {
+            name = await AccountCharacters.MainNameAsync(_db, member, cancellationToken);
+            _mainNames[appUserId] = name;
+        }
+        return name;
     }
 }

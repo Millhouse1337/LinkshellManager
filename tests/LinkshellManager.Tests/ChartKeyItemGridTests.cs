@@ -229,10 +229,12 @@ public class ChartKeyItemGridTests
         db.AppUserLinkshells.Add(new AppUserLinkshell
         {
             Id = 1, LinkshellId = 1, AppUserId = "user-1", CharacterName = "Aeris", Rank = "Member",
+            AppUser = new AppUser { Id = "user-1", UserName = "user-1", CharacterName = "Aeris" },
         });
         db.AppUserLinkshells.Add(new AppUserLinkshell
         {
             Id = 2, LinkshellId = 99, AppUserId = "user-2", CharacterName = "Stranger", Rank = "Member",
+            AppUser = new AppUser { Id = "user-2", UserName = "user-2", CharacterName = "Stranger" },
         });
         db.SaveChanges();
         return db;

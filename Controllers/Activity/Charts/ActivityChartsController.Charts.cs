@@ -387,7 +387,7 @@ public sealed partial class ActivityChartsController
         var canManage = await CanAsync(membership, role => role.CanManageCharts, cancellationToken);
         return (
             null,
-            new ChartBoardActor(appUser.Id, membership.CharacterName ?? appUser.CharacterName),
+            new ChartBoardActor(appUser.Id, appUser.CharacterName),
             membership.Id,
             canManage);
     }
@@ -407,7 +407,7 @@ public sealed partial class ActivityChartsController
             return (Forbid(), default);
         }
 
-        return (null, new ChartBoardActor(appUser.Id, membership!.CharacterName ?? appUser.CharacterName));
+        return (null, new ChartBoardActor(appUser.Id, appUser.CharacterName));
     }
 
     private async Task<(IActionResult? Failure, ChartPopItem? Item, ChartBoardActor Actor)>

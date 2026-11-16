@@ -207,7 +207,7 @@ public sealed class EventHistoryEditService
         // Clamp to >= 0 on the SERVER (the client min=0 is only advisory and can be
         // bypassed) so a granted amount can never silently penalise a member's balance.
         var earned = DkpRounding.Round(Math.Max(0, dkp), step);
-        var characterName = membership.CharacterName ?? membership.AppUser?.CharacterName ?? membership.AppUser?.UserName ?? "Unknown member";
+        var characterName = membership.AppUser?.CharacterName ?? membership.AppUser?.UserName ?? "Unknown member";
 
         var row = EventHistoryBuilder.ParticipantRow(
             appUserId: appUserId,

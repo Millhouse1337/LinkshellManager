@@ -56,9 +56,9 @@ public sealed partial class ActivityDkpController
             .Select(m => new
             {
                 AppUserId = m.AppUserId!,
-                Name = m.CharacterName ?? m.AppUser!.CharacterName ?? m.AppUser!.UserName,
-                Alt1 = m.AppUser!.AltCharacterName1,
-                Alt2 = m.AppUser!.AltCharacterName2
+                Name = m.AppUser!.CharacterName ?? m.AppUser!.UserName,
+                Alt1 = m.AppUser!.Characters.Where(c => c.Slot == Character.Alt1Slot).Select(c => c.Name).FirstOrDefault(),
+                Alt2 = m.AppUser!.Characters.Where(c => c.Slot == Character.Alt2Slot).Select(c => c.Name).FirstOrDefault()
             })
             .ToListAsync(cancellationToken);
 

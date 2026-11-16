@@ -192,7 +192,7 @@ public sealed class ManualLootService
             EventId = resolved.EventId,
             EventHistoryId = resolved.EventHistoryId,
             ItemName = itemName,
-            ItemWinner = winner.CharacterName ?? itemWinner,
+            ItemWinner = winner.AppUser?.CharacterName ?? itemWinner,
             ItemWinnerAppUserId = winner.AppUserId,
             WinningDkpSpent = dkpSpent,
             DkpPoolId = poolId,
@@ -268,7 +268,7 @@ public sealed class ManualLootService
                 // has to credit the same wallet the debit came out of even after a remap.
                 DkpPoolRef.Pinned(poolId),
                 new DkpEntryContext(
-                    CharacterName: winner.CharacterName,
+                    CharacterName: winner.AppUser?.CharacterName,
                     EventName: resolved.EventName,
                     EventType: resolved.EventType,
                     EventHistoryId: resolved.EventHistoryId,

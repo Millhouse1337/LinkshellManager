@@ -137,6 +137,8 @@ public sealed partial class ActivitySettingsController
         // Whether to badge super-admin rows with ADMIN. One cached bool for the whole
         // roster — AppUser is already Included, so this costs no extra query.
         var adminOverrideEnabled = await _adminOverride.IsEnabledAsync(cancellationToken);
+        // The members' alts, from Characters.
+        var characters = await AccountCharacters.LoadForLinkshellAsync(_dbContext, linkshell.Id, cancellationToken);
 
         // Member Status is now the single source of truth (the attendance rule
         // auto-drives Active/Inactive at close — see MemberActivityService), so the
@@ -147,13 +149,13 @@ public sealed partial class ActivitySettingsController
             linkshell.AppUserLinkshells.Count,
             linkshell.Details,
             linkshell.AppUserLinkshells
-                .OrderBy(link => link.CharacterName)
+                .OrderBy(link => link.AppUser?.CharacterName)
                 .Select(link => new ActivityMemberDto(
                     link.Id,
                     link.AppUserId,
-                    link.CharacterName ?? link.AppUser?.UserName ?? "Unknown member",
-                    link.AppUser?.AltCharacterName1,
-                    link.AppUser?.AltCharacterName2,
+                    link.AppUser?.CharacterName ?? link.AppUser?.UserName ?? "Unknown member",
+                    AccountCharacters.Alt1(AccountCharacters.For(characters, link.AppUserId))?.Name,
+                    AccountCharacters.Alt2(AccountCharacters.For(characters, link.AppUserId))?.Name,
                     link.Rank,
                     link.Status,
                     link.LinkshellDkp,

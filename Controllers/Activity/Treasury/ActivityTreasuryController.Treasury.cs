@@ -514,9 +514,9 @@ public sealed partial class ActivityTreasuryController
         var roster = await _dbContext.AppUserLinkshells
             .AsNoTracking()
             .Where(member => linkshellIds.Contains(member.LinkshellId)
-                && member.CharacterName != null
-                && member.CharacterName != "")
-            .Select(member => new { member.Id, member.LinkshellId, member.AppUserId, member.CharacterName })
+                && member.AppUser!.CharacterName != null
+                && member.AppUser!.CharacterName != "")
+            .Select(member => new { member.Id, member.LinkshellId, member.AppUserId, member.AppUser!.CharacterName })
             .ToListAsync(cancellationToken);
 
         var byAppUser = roster
@@ -646,11 +646,11 @@ public sealed partial class ActivityTreasuryController
         await _dbContext.AppUserLinkshells
             .AsNoTracking()
             .Where(member => member.LinkshellId == linkshellId
-                && member.CharacterName != null
-                && member.CharacterName != "")
-            .OrderBy(member => member.CharacterName)
+                && member.AppUser!.CharacterName != null
+                && member.AppUser!.CharacterName != "")
+            .OrderBy(member => member.AppUser!.CharacterName)
             .Select(member => new ActivityTreasuryMemberDto(
-                member.Id, member.AppUserId, member.CharacterName!, member.Rank))
+                member.Id, member.AppUserId, member.AppUser!.CharacterName!, member.Rank))
             .ToListAsync(cancellationToken);
 
     // Membership rows to names, checked against THIS linkshell.
@@ -683,9 +683,9 @@ public sealed partial class ActivityTreasuryController
             .AsNoTracking()
             .Where(member => member.LinkshellId == linkshellId
                 && wanted.Contains(member.Id)
-                && member.CharacterName != null
-                && member.CharacterName != "")
-            .Select(member => new TreasuryRecipient(member.AppUserId, member.CharacterName!))
+                && member.AppUser!.CharacterName != null
+                && member.AppUser!.CharacterName != "")
+            .Select(member => new TreasuryRecipient(member.AppUserId, member.AppUser!.CharacterName!))
             .ToListAsync(cancellationToken);
 
         if (recipients.Count != wanted.Count)
@@ -776,7 +776,7 @@ public sealed partial class ActivityTreasuryController
             return (Forbid(), default!);
         }
 
-        return (null, new TreasuryActor(appUser.Id, membership!.CharacterName ?? appUser.CharacterName));
+        return (null, new TreasuryActor(appUser.Id, appUser.CharacterName));
     }
 
     private async Task<(IActionResult? Failure, JournalEntry? Entry, TreasuryActor Actor)>

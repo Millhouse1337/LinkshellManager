@@ -31,7 +31,7 @@ public sealed partial class ActivityRosterController
             return Ok(new { candidates = Array.Empty<object>() });
         }
 
-        var names = NameKeys(appUser).ToList();
+        var names = NameKeys(appUser, await AccountCharacters.LoadForAccountAsync(_dbContext, appUser.Id, cancellationToken)).ToList();
         if (names.Count == 0)
         {
             return Ok(new { candidates = Array.Empty<object>() });
@@ -44,10 +44,8 @@ public sealed partial class ActivityRosterController
             .Where(m => m.AppUserId != null
                         && m.AppUser != null
                         && m.AppUser.IsPlaceholder
-                        && ((m.CharacterName != null && names.Contains(m.CharacterName.ToLower()))
-                            || (m.AppUser.CharacterName != null && names.Contains(m.AppUser.CharacterName.ToLower()))
-                            || (m.AppUser.AltCharacterName1 != null && names.Contains(m.AppUser.AltCharacterName1.ToLower()))
-                            || (m.AppUser.AltCharacterName2 != null && names.Contains(m.AppUser.AltCharacterName2.ToLower()))))
+                        && ((m.AppUser.CharacterName != null && names.Contains(m.AppUser.CharacterName.ToLower()))
+                            || m.AppUser.Characters.Any(c => names.Contains(c.NormalizedName))))
             .ToListAsync(cancellationToken);
 
         if (placeholderMemberships.Count == 0)
@@ -76,7 +74,7 @@ public sealed partial class ActivityRosterController
                     placeholderAppUserId = m.AppUserId,
                     linkshellId = m.LinkshellId,
                     linkshellName = string.IsNullOrWhiteSpace(m.Linkshell?.LinkshellName) ? "Linkshell" : m.Linkshell!.LinkshellName,
-                    characterName = m.CharacterName ?? m.AppUser?.CharacterName ?? "Unknown",
+                    characterName = m.AppUser?.CharacterName ?? "Unknown",
                     currentDkp = DkpRounding.Round(m.LinkshellDkp ?? 0, step),
                     totalDkp = DkpRounding.Round(m.SeededDkpEarned, step),
                     totalSpent = DkpRounding.Round(m.SeededDkpSpent, step),
@@ -139,8 +137,10 @@ public sealed partial class ActivityRosterController
 
         // A user may only ask for a placeholder that goes by one of their own character names.
         // Never trust the client's chosen id blindly.
-        var myNames = NameKeys(appUser);
-        var phNames = NameKeys(placeholderMembership.AppUser, placeholderMembership.CharacterName);
+        var myNames = NameKeys(appUser, await AccountCharacters.LoadForAccountAsync(_dbContext, appUser.Id, cancellationToken));
+        var phNames = NameKeys(
+            placeholderMembership.AppUser,
+            await AccountCharacters.LoadForAccountAsync(_dbContext, placeholderMembership.AppUserId, cancellationToken));
         if (!phNames.Overlaps(myNames))
         {
             return Forbid();
@@ -229,16 +229,14 @@ public sealed partial class ActivityRosterController
         return (appUser.Id, null);
     }
 
-    // Lowercased set of a user's character names (main + alts), plus an optional
-    // extra (a membership's own CharacterName).
-    private static HashSet<string> NameKeys(AppUser user, string? extra = null)
+    // Lowercased set of a user's character names: the main (AppUser.CharacterName) and every
+    // Characters row (the alts).
+    private static HashSet<string> NameKeys(AppUser user, IEnumerable<Character> characters)
     {
         var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         void Add(string? n) { if (!string.IsNullOrWhiteSpace(n)) { set.Add(n.Trim().ToLowerInvariant()); } }
         Add(user.CharacterName);
-        Add(user.AltCharacterName1);
-        Add(user.AltCharacterName2);
-        Add(extra);
+        foreach (var character in characters) { Add(character.Name); }
         return set;
     }
 }

@@ -1,3 +1,4 @@
+using LinkshellManagerDiscordApp.Services;
 using LinkshellManagerDiscordApp.Utils;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -32,7 +33,7 @@ public sealed partial class ActivityRosterController
         var members = await _dbContext.AppUserLinkshells
             .Include(link => link.AppUser)
             .Where(link => link.LinkshellId == linkshellId && link.AppUserId != null)
-            .OrderBy(link => link.CharacterName)
+            .OrderBy(link => link.AppUser!.CharacterName)
             .AsNoTracking()
             .ToListAsync(cancellationToken);
 
@@ -80,28 +81,35 @@ public sealed partial class ActivityRosterController
             return names;
         }
 
+        // Every character's name, jobs and merits, from Characters (slot 0 the main).
+        var characters = await AccountCharacters.LoadForLinkshellAsync(_dbContext, linkshellId, cancellationToken);
         var roster = members
-            .Select(link => new ActivityJobsRosterMemberDto(
-                link.Id,
-                link.CharacterName ?? link.AppUser?.CharacterName ?? link.AppUser?.UserName ?? "Unknown member",
-                link.Rank,
-                ProfileJobLevels.ToCatalogLevels(link.AppUser?.JobLevels),
-                string.IsNullOrWhiteSpace(link.AppUser?.AltCharacterName1) ? null : link.AppUser!.AltCharacterName1,
-                ProfileJobLevels.ToCatalogLevels(link.AppUser?.Alt1JobLevels),
-                string.IsNullOrWhiteSpace(link.AppUser?.AltCharacterName2) ? null : link.AppUser!.AltCharacterName2,
-                ProfileJobLevels.ToCatalogLevels(link.AppUser?.Alt2JobLevels),
-                ProfileJobLevels.ToCatalogFlags(link.AppUser?.StrongJobs),
-                ProfileJobLevels.ToCatalogFlags(link.AppUser?.Alt1StrongJobs),
-                ProfileJobLevels.ToCatalogFlags(link.AppUser?.Alt2StrongJobs),
-                RelicFlags(link.AppUserId, 0),
-                RelicFlags(link.AppUserId, 1),
-                RelicFlags(link.AppUserId, 2),
-                ProfileJobLevels.NormalizeMerits(link.AppUser?.MeritJobs),
-                ProfileJobLevels.NormalizeMerits(link.AppUser?.Alt1MeritJobs),
-                ProfileJobLevels.NormalizeMerits(link.AppUser?.Alt2MeritJobs),
-                RelicNames(link.AppUserId, 0),
-                RelicNames(link.AppUserId, 1),
-                RelicNames(link.AppUserId, 2)))
+            .Select(link =>
+            {
+                var own = AccountCharacters.For(characters, link.AppUserId);
+                return (link, Main: AccountCharacters.MainCharacter(own), Alt1: AccountCharacters.Alt1(own), Alt2: AccountCharacters.Alt2(own));
+            })
+            .Select(row => new ActivityJobsRosterMemberDto(
+                row.link.Id,
+                row.link.AppUser?.CharacterName ?? row.link.AppUser?.UserName ?? "Unknown member",
+                row.link.Rank,
+                ProfileJobLevels.ToCatalogLevels(row.Main?.JobLevels),
+                row.Alt1?.Name,
+                ProfileJobLevels.ToCatalogLevels(row.Alt1?.JobLevels),
+                row.Alt2?.Name,
+                ProfileJobLevels.ToCatalogLevels(row.Alt2?.JobLevels),
+                ProfileJobLevels.ToCatalogFlags(row.Main?.StrongJobs),
+                ProfileJobLevels.ToCatalogFlags(row.Alt1?.StrongJobs),
+                ProfileJobLevels.ToCatalogFlags(row.Alt2?.StrongJobs),
+                RelicFlags(row.link.AppUserId, 0),
+                RelicFlags(row.link.AppUserId, 1),
+                RelicFlags(row.link.AppUserId, 2),
+                ProfileJobLevels.NormalizeMerits(row.Main?.MeritJobs),
+                ProfileJobLevels.NormalizeMerits(row.Alt1?.MeritJobs),
+                ProfileJobLevels.NormalizeMerits(row.Alt2?.MeritJobs),
+                RelicNames(row.link.AppUserId, 0),
+                RelicNames(row.link.AppUserId, 1),
+                RelicNames(row.link.AppUserId, 2)))
             .ToList();
 
         return Ok(new ActivityJobsRosterDto(EventJobCatalog.MainJobOptions, roster));

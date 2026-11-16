@@ -498,7 +498,8 @@ public class PastEventRowsPinnedTests
         var row = await db.AppUserEventHistories.AsNoTracking().SingleAsync();
         Assert.Equal(50, row.EventHistoryId);
         Assert.Equal("bob", row.AppUserId);
-        Assert.Equal("Bobby", row.CharacterName);
+        // The account's main, not the roster name "Bobby": Round 5 reads names from the account.
+        Assert.Equal("Bob", row.CharacterName);
         Assert.Equal("SAM", row.JobName);
         Assert.Null(row.SubJobName);
         Assert.Equal("DD", row.JobType);
@@ -516,7 +517,7 @@ public class PastEventRowsPinnedTests
         Assert.Equal(await pools.ResolveAsync(Ls, "Sky", CancellationToken.None), ledger.DkpPoolId);
         Assert.False(ledger.DkpPoolPinned);
         Assert.Equal(endedAt, ledger.OccurredAt);
-        Assert.Equal("Bobby", ledger.CharacterName);
+        Assert.Equal("Bob", ledger.CharacterName);
         Assert.Equal("Sky", ledger.EventName);
         Assert.Equal("Sky", ledger.EventType);
         Assert.Equal("Tu'Lia", ledger.EventLocation);

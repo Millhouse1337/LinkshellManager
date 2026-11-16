@@ -455,6 +455,7 @@ public sealed class HnmStandardCampFinalizer
         // does: the Claim Shield taggers are appended after this loop and owe nothing to it.
 
         var memberships = await _db.AppUserLinkshells
+            .Include(m => m.AppUser)
             .Where(m => m.LinkshellId == ev.LinkshellId && m.AppUserId != null)
             .ToListAsync(cancellationToken);
         var membershipByAppUserId = memberships
@@ -472,7 +473,7 @@ public sealed class HnmStandardCampFinalizer
 
             var characterName = participation?.CharacterName
                 ?? characterNameByAppUserId.GetValueOrDefault(appUserId)
-                ?? membership?.CharacterName;
+                ?? membership?.AppUser?.CharacterName;
             if (string.IsNullOrWhiteSpace(characterName)) continue;  // nothing to review
 
             // A member who scanned but qualified for nothing is still LISTED — they were at the
@@ -510,7 +511,7 @@ public sealed class HnmStandardCampFinalizer
                 if (listedAppUserIds.Contains(appUserId)) continue;
                 if (!membershipByAppUserId.TryGetValue(appUserId, out var membership)) continue;
 
-                var taggerName = membership.CharacterName;
+                var taggerName = membership.AppUser?.CharacterName;
                 if (string.IsNullOrWhiteSpace(taggerName)) continue;
 
                 members.Add(new HnmCampMember(

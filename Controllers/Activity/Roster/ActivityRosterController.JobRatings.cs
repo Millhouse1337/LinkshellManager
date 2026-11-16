@@ -37,13 +37,10 @@ public sealed partial class ActivityRosterController
             .FirstOrDefaultAsync(m => m.LinkshellId == linkshellId && m.AppUserId == targetAppUserId, cancellationToken);
         if (targetMembership is null) return NotFound(new { error = "That member was not found in this linkshell." });
 
-        // Every character's levels live on the account (the main's since AccountJobsAndKeyItemAccounts).
-        var storedLevels = characterSlot switch
-        {
-            1 => targetMembership.AppUser?.Alt1JobLevels,
-            2 => targetMembership.AppUser?.Alt2JobLevels,
-            _ => targetMembership.AppUser?.JobLevels,
-        };
+        // Every character's levels are on its Characters row (slot 0 the main, 1 and 2 the alts).
+        var storedLevels = AccountCharacters.InSlot(
+            await AccountCharacters.LoadForAccountAsync(_dbContext, targetMembership.AppUserId, cancellationToken),
+            (short)characterSlot)?.JobLevels;
         var jobLevels = ProfileJobLevels.ToCatalogLevels(storedLevels);
 
         var rows = await _dbContext.JobRatings

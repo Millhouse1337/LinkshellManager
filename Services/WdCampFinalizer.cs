@@ -123,7 +123,7 @@ public sealed class WdCampFinalizer
         // Fallback names for account-linked rows whose participation carries none.
         var membershipNameByAppUserId = await _db.AppUserLinkshells
             .Where(m => m.LinkshellId == ev.LinkshellId && m.AppUserId != null)
-            .Select(m => new { m.AppUserId, m.CharacterName })
+            .Select(m => new { m.AppUserId, m.AppUser!.CharacterName })
             .ToListAsync(cancellationToken);
         var nameByAppUserId = membershipNameByAppUserId
             .GroupBy(m => m.AppUserId!, StringComparer.OrdinalIgnoreCase)

@@ -99,7 +99,7 @@ public sealed class PlaceholderClaimService
         {
             var existing = await _db.AppUserLinkshells
                 .FirstOrDefaultAsync(m => m.AppUserId == realAppUserId && m.LinkshellId == ph.LinkshellId, cancellationToken);
-            var phName = ph.CharacterName ?? placeholder.CharacterName ?? "an imported member";
+            var phName = placeholder.CharacterName ?? "an imported member";
             var phDkp = ph.LinkshellDkp ?? 0;
 
             if (existing is null)
@@ -109,14 +109,14 @@ public sealed class PlaceholderClaimService
                 ph.AppUserId = realAppUserId;
                 ph.DiscordUserId = null; // the real account now owns identity
                 ph.DiscordIdConfirmed = false;
-                AddMergeRow(realAppUserId, ph.LinkshellId, ph.CharacterName, now,
+                AddMergeRow(realAppUserId, ph.LinkshellId, placeholder.CharacterName, now,
                     $"Claimed imported member {phName}: their roster spot, {phDkp:0.##} DKP and DKP history moved to this account.");
             }
             else
             {
                 await MergeMembershipAsync(existing, ph, cancellationToken);
                 _db.AppUserLinkshells.Remove(ph);
-                AddMergeRow(realAppUserId, ph.LinkshellId, existing.CharacterName, now,
+                AddMergeRow(realAppUserId, ph.LinkshellId, realUser.CharacterName, now,
                     $"Claimed imported member {phName}: {phDkp:0.##} DKP added to this account's balance "
                     + $"(lifetime +{ph.SeededDkpEarned:0.##} earned, +{ph.SeededDkpSpent:0.##} spent). "
                     + "Their DKP history moved here too.");

@@ -475,7 +475,7 @@ public sealed class LootEditService
             occurredAtUtc,
             poolRef,
             new DkpEntryContext(
-                CharacterName: membership.CharacterName,
+                CharacterName: membership.AppUser?.CharacterName,
                 EventName: eventName,
                 EventType: eventType,
                 EventLocation: eventLocation,
@@ -629,7 +629,7 @@ public sealed class LootEditService
                     poolRef,
                     entryContext with
                     {
-                        CharacterName = oldMembership.CharacterName,
+                        CharacterName = oldMembership.AppUser?.CharacterName,
                         Details = $"Edit refund: previous loot record corrected. Reason: {Truncate(reason, 800)}",
                     },
                     cancellationToken);
@@ -666,7 +666,7 @@ public sealed class LootEditService
                     poolRef,
                     entryContext with
                     {
-                        CharacterName = newMembership.CharacterName,
+                        CharacterName = newMembership.AppUser?.CharacterName,
                         Details = $"Edit spend: new loot record applied. Reason: {Truncate(reason, 800)}",
                     },
                     cancellationToken,

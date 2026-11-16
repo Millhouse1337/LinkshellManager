@@ -58,7 +58,7 @@ public sealed partial class ActivitySettingsController
             RuleDetails = details,
             Category = string.IsNullOrWhiteSpace(request.Category) ? null : request.Category.Trim(),
             CreatedByAppUserId = appUser.Id,
-            CreatedByCharacterName = membership!.CharacterName ?? appUser.CharacterName,
+            CreatedByCharacterName = appUser.CharacterName,
             CreatedAt = DateTime.UtcNow
         };
         _dbContext.Rules.Add(rule);
@@ -185,7 +185,7 @@ public sealed partial class ActivitySettingsController
             AnnouncementDetails = details,
             Category = string.IsNullOrWhiteSpace(request.Category) ? null : request.Category.Trim(),
             CreatedByAppUserId = appUser.Id,
-            CreatedByCharacterName = membership!.CharacterName ?? appUser.CharacterName,
+            CreatedByCharacterName = appUser.CharacterName,
             CreatedAt = DateTime.UtcNow
         };
         _dbContext.Announcements.Add(announcement);
@@ -313,7 +313,7 @@ public sealed partial class ActivitySettingsController
             Quantity = request.Quantity,
             Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim(),
             CreatedByAppUserId = appUser.Id,
-            CreatedByCharacterName = membership!.CharacterName ?? appUser.CharacterName,
+            CreatedByCharacterName = appUser.CharacterName,
             CreatedAt = now,
             UpdatedAt = now
         };
@@ -438,7 +438,7 @@ public sealed partial class ActivitySettingsController
             return BadRequest(new { error = "Say who sold it — they are the one holding the gil." });
         }
 
-        var characterName = membership!.CharacterName ?? appUser.CharacterName;
+        var characterName = appUser.CharacterName;
         await _itemSales.RecordSaleAsync(
             item,
             salePrice,
@@ -470,7 +470,7 @@ public sealed partial class ActivitySettingsController
             return Forbid();
         }
 
-        var characterName = membership!.CharacterName ?? appUser.CharacterName;
+        var characterName = appUser.CharacterName;
         try
         {
             await _itemSales.ReverseSaleAsync(

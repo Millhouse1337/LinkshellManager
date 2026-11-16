@@ -105,9 +105,11 @@ public sealed partial class AddonApiController : ControllerBase
         // Null when the issuer is unknown. (It used to fall back to the token's Label, which was
         // always null: nothing ever set one.)
         if (string.IsNullOrEmpty(token.IssuedToAppUserId)) return null;
-        var membership = await _dbContext.AppUserLinkshells
-            .FirstOrDefaultAsync(m => m.LinkshellId == token.LinkshellId && m.AppUserId == token.IssuedToAppUserId, cancellationToken);
-        return membership?.CharacterName;
+        // The issuer's main (the account's CharacterName), while they are on the token's linkshell.
+        return await _dbContext.AppUserLinkshells
+            .Where(m => m.LinkshellId == token.LinkshellId && m.AppUserId == token.IssuedToAppUserId)
+            .Select(m => m.AppUser!.CharacterName)
+            .FirstOrDefaultAsync(cancellationToken);
     }
 
     // Shared deletion path: drop the join row, so re-posting the same attendee posts cleanly.

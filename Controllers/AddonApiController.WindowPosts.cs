@@ -235,9 +235,9 @@ public sealed partial class AddonApiController
         var members = memberships
             .GroupBy(m => m.AppUserId!, StringComparer.Ordinal)
             .Select(g => g.First())
-            .Select(m => (m.AppUserId!, (m.CharacterName ?? m.AppUser?.CharacterName ?? m.AppUser?.UserName ?? "Unknown member").Trim()))
+            .Select(m => (m.AppUserId!, (m.AppUser?.CharacterName ?? m.AppUser?.UserName ?? "Unknown member").Trim()))
             .ToList();
-        var actorName = (actorMembership?.CharacterName ?? appUser.CharacterName ?? appUser.UserName ?? "officer").Trim();
+        var actorName = (appUser.CharacterName ?? appUser.UserName ?? "officer").Trim();
         return (new NewPostContext(camp, appUser, actorName, members), null);
     }
 

@@ -155,18 +155,19 @@ public sealed class ChartBoardService
         var rows = await _db.AppUserLinkshells
             .AsNoTracking()
             .Where(member => member.LinkshellId == linkshellId
-                && member.CharacterName != null
-                && member.CharacterName != "")
-            .OrderBy(member => member.CharacterName)
+                && member.AppUser != null
+                && member.AppUser.CharacterName != null
+                && member.AppUser.CharacterName != "")
+            .OrderBy(member => member.AppUser!.CharacterName)
             .Select(member => new
             {
                 member.Id,
                 member.AppUserId,
-                member.CharacterName,
+                member.AppUser!.CharacterName,
                 member.Rank,
-                // Left join through the navigation: an unsynced member has no account, so no alts.
-                Alt1 = member.AppUser != null ? member.AppUser.AltCharacterName1 : null,
-                Alt2 = member.AppUser != null ? member.AppUser.AltCharacterName2 : null,
+                // The main is the account's CharacterName; the alts are its Characters rows.
+                Alt1 = member.AppUser!.Characters.Where(c => c.Slot == Character.Alt1Slot).Select(c => c.Name).FirstOrDefault(),
+                Alt2 = member.AppUser!.Characters.Where(c => c.Slot == Character.Alt2Slot).Select(c => c.Name).FirstOrDefault(),
             })
             .ToListAsync(cancellationToken);
 
@@ -307,8 +308,9 @@ public sealed class ChartBoardService
                 .AsNoTracking()
                 .Where(member => member.LinkshellId == linkshellId
                     && wantedIds.Contains(member.Id)
-                    && member.CharacterName != null
-                    && member.CharacterName != "")
+                    && member.AppUser!.CharacterName != null
+                    && member.AppUser!.CharacterName != "")
+                .Select(member => new { member.Id, member.AppUser!.CharacterName })
                 .ToDictionaryAsync(member => member.Id, member => member.CharacterName!, cancellationToken);
 
             if (namesById.Count != wantedIds.Count)

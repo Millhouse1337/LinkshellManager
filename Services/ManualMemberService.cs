@@ -57,10 +57,10 @@ public sealed class ManualMemberService
 
         var members = await _context.AppUserLinkshells
             .Include(m => m.AppUser)
-            .Where(m => m.LinkshellId == linkshellId && m.CharacterName != null)
+            .Where(m => m.LinkshellId == linkshellId && m.AppUser != null && m.AppUser.CharacterName != null)
             .ToListAsync(cancellationToken);
         var match = members.FirstOrDefault(m =>
-            string.Equals(m.CharacterName!.Trim(), main, StringComparison.OrdinalIgnoreCase));
+            string.Equals(m.AppUser!.CharacterName!.Trim(), main, StringComparison.OrdinalIgnoreCase));
         if (match is not null)
         {
             if (match.AppUser?.IsPlaceholder != true)
@@ -147,10 +147,10 @@ public sealed class ManualMemberService
 
         var members = await _context.AppUserLinkshells
             .Include(m => m.AppUser)
-            .Where(m => m.LinkshellId == linkshellId && m.CharacterName != null && m.AppUserId != null)
+            .Where(m => m.LinkshellId == linkshellId && m.AppUserId != null && m.AppUser != null && m.AppUser.CharacterName != null)
             .ToListAsync(cancellationToken);
         var match = members.FirstOrDefault(m =>
-            string.Equals(m.CharacterName!.Trim(), main, StringComparison.OrdinalIgnoreCase));
+            string.Equals(m.AppUser!.CharacterName!.Trim(), main, StringComparison.OrdinalIgnoreCase));
         if (match is not null)
         {
             if (match.AppUser is not null)
