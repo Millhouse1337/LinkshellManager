@@ -182,6 +182,22 @@ public static class SchemaTestDatabase
         await db.GetService<IMigrator>().MigrateAsync();
     }
 
+    // Moves the database to exactly this migration, forwards or backwards.
+    public static async Task MigrateToAsync(string connectionString, string targetMigration)
+    {
+        await using var db = CreateContext(connectionString);
+        await db.GetService<IMigrator>().MigrateAsync(targetMigration);
+    }
+
+    // A database Migrate built from nothing: Baseline first, then every migration added after the
+    // squash, and nothing else.
+    public static void AssertBuiltFromBaseline(ApplicationDbContext db)
+    {
+        var applied = db.Database.GetAppliedMigrations().ToList();
+        Assert.Equal(MigrationBaseline.BaselineMigrationId, applied[0]);
+        Assert.Equal(db.Database.GetMigrations(), applied);
+    }
+
     public static async Task ExecuteAsync(string connectionString, string sql)
     {
         await using var connection = new NpgsqlConnection(connectionString);

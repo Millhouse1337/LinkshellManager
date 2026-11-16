@@ -26,6 +26,14 @@ public class Event
     [MaxLength(256)]
     public string? AssignedMonsterName { get; set; }
 
+    // AssignedMonsterName's one-per-spawn key (HnmConfig.SpawnKey: "Fafnir", "Nidhogg" and
+    // "Fafnir/Nidhogg" all give "fafnir/nidhogg"). Derived: every save stamps it from the name
+    // (ApplicationDbContext.StampDerivedColumns), so nothing sets it by hand. Null = no monster.
+    // Added in Round 5 (AddCampSpawnKeys). Nothing reads it yet; a later deploy moves the camp
+    // lookups onto it. Never taken from EventName: only the assigned monster is a spawn.
+    [MaxLength(256)]
+    public string? SpawnKey { get; set; }
+
     public string? CreatorUserId { get; set; }
 
     // Set when the event transitions from queued to live (CommencementStartTime

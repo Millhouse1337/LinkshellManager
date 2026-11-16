@@ -28,6 +28,12 @@ public class PartySetup
     [MaxLength(256)]
     public string? AssignedMonsterName { get; set; }
 
+    // AssignedMonsterName's one-per-spawn key (HnmConfig.SpawnKey), stamped on every save
+    // (ApplicationDbContext.StampDerivedColumns). Null = not assigned to a monster. Added in
+    // Round 5 (AddCampSpawnKeys); nothing reads it yet.
+    [MaxLength(256)]
+    public string? SpawnKey { get; set; }
+
     [MaxLength(1024)]
     public string? Notes { get; set; }
 

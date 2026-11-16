@@ -58,6 +58,13 @@ public class LinkshellMonsterTiming
     [MaxLength(128)]
     public string MonsterName { get; set; } = string.Empty;
 
+    // MonsterName's one-per-spawn key (HnmConfig.SpawnKey), stamped on every save
+    // (ApplicationDbContext.StampDerivedColumns). Added in Round 5 (AddCampSpawnKeys); nothing
+    // reads it yet. A later deploy looks rows up by it and makes (LinkshellId, SpawnKey) unique,
+    // which is what finally stops "Nidhogg" sitting beside "Fafnir/Nidhogg".
+    [MaxLength(256)]
+    public string? SpawnKey { get; set; }
+
     // Lower-invariant MonsterName, so the unique index and the EF `names.Contains(...)` predicates
     // can both use it. HnmRecurringBoardService does the ToLower() inside its predicate instead and
     // therefore can't use its index; this column is the cheap fix for the same problem.

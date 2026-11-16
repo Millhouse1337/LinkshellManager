@@ -1704,6 +1704,12 @@ namespace LinkshellManagerDiscordApp.Data
                     .OnDelete(DeleteBehavior.SetNull);
                 entity.HasIndex(item => item.PartySetupId);
 
+                // Derived column (AddCampSpawnKeys), stamped by StampDerivedColumns. The plain
+                // LinkshellId index is named so EF keeps it: the new pair index would otherwise
+                // replace it, and AddCampSpawnKeys only adds.
+                entity.HasIndex(item => item.LinkshellId);
+                entity.HasIndex(item => new { item.LinkshellId, item.SpawnKey });
+
                 // Npgsql maps a uint row version to Postgres's built-in xmin, so this adds no
                 // column: it only makes every UPDATE/DELETE of an event check nobody saved it since
                 // we read it. Why: Models/Event.cs (Version).
@@ -1780,6 +1786,9 @@ namespace LinkshellManagerDiscordApp.Data
                 // MonsterTimingEditor rejects a duplicate under HnmConfig.MonsterMatchNames before
                 // it ever reaches the DB.
                 entity.HasIndex(timing => new { timing.LinkshellId, timing.NormalizedMonsterName }).IsUnique();
+                // Derived column (AddCampSpawnKeys), stamped by StampDerivedColumns. Not unique yet:
+                // a later deploy makes it unique once two rows for one spawn are ruled out.
+                entity.HasIndex(timing => new { timing.LinkshellId, timing.SpawnKey });
                 entity.HasOne(timing => timing.Linkshell)
                     .WithMany()
                     .HasForeignKey(timing => timing.LinkshellId)
@@ -2852,6 +2861,8 @@ namespace LinkshellManagerDiscordApp.Data
                     .HasForeignKey(item => item.EventHistoryId)
                     .OnDelete(DeleteBehavior.SetNull);
                 entity.HasIndex(item => new { item.LinkshellId, item.CapturedAtUtc });
+                // Derived column (AddCampSpawnKeys), stamped by StampDerivedColumns.
+                entity.HasIndex(item => new { item.LinkshellId, item.SpawnKey });
                 // UNIQUE: one capture per live camp. Every officer's addon reads the same lottery off
                 // chat, and each post joins the camp's capture rather than adding another. The
                 // database enforces it because those posts land at the same moment (UniqueRaceRetry).

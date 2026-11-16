@@ -25,7 +25,7 @@
 [ClaimShieldCaptureMembers] 1 row(s)
   Id=1 | ActionMessage="hits" | AppUserId=null | CaptureId=1 | CharacterName="Randomguy" | Matched=false
 [ClaimShieldCaptures] 1 row(s)
-  Id=1 | CapturedAtUtc=T0-10m | CapturedByCharacterName="Alpha" | CapturedMessage="Claim Shield: won" | CreatedAtUtc=T0-10m | EventHistoryId=null | EventId=null | LinkshellId=1 | MonsterName="Fafnir" | TotalPlayers=1 | Won=true
+  Id=1 | CapturedAtUtc=T0-10m | CapturedByCharacterName="Alpha" | CapturedMessage="Claim Shield: won" | CreatedAtUtc=T0-10m | EventHistoryId=null | EventId=null | LinkshellId=1 | MonsterName="Fafnir" | SpawnKey=null | TotalPlayers=1 | Won=true
 [DkpLedgerEntries] 4 row(s)
   Id=1 | Amount=40 | AppUserId="alpha" | AuditRelatedLedgerEntryId=null | CharacterName="Alpha" | Details=null | DkpPoolId=2 | DkpPoolPinned=false | EditReason=null | EntryType="AuditAdjustment" | EventHistoryId=null | EventLocation=null | EventName=null | EventType="HNM" | ItemName=null | LinkshellId=1 | OccurredAt=T0-10080m | Sequence=0 | SourceEventLootDetailId=null | SourceWindowEventId=null
   Id=2 | Amount=20 | AppUserId="beta" | AuditRelatedLedgerEntryId=null | CharacterName="Beta" | Details=null | DkpPoolId=2 | DkpPoolPinned=false | EditReason=null | EntryType="AuditAdjustment" | EventHistoryId=null | EventLocation=null | EventName=null | EventType="HNM" | ItemName=null | LinkshellId=1 | OccurredAt=T0-10080m | Sequence=0 | SourceEventLootDetailId=null | SourceWindowEventId=null

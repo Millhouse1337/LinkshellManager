@@ -44,28 +44,37 @@ public class MigrationBaselineAdoptionTests
         Assert.All(oldIds, id => Assert.True(
             string.CompareOrdinal(id, MigrationBaseline.BaselineMigrationId) < 0, $"{id} sorts after Baseline."));
 
-        // The build knows only Baseline, and no old id is reused.
+        // The build starts at Baseline (later migrations, Round 5 on, come after it), and no old id
+        // is reused.
         using var db = SchemaTestDatabase.CreateContext("Host=unused");
         var known = db.Database.GetMigrations().ToList();
-        Assert.Equal(new[] { MigrationBaseline.BaselineMigrationId }, known);
+        Assert.Equal(MigrationBaseline.BaselineMigrationId, known[0]);
+        Assert.All(known, id => Assert.True(
+            string.CompareOrdinal(id, MigrationBaseline.BaselineMigrationId) >= 0, $"{id} sorts before Baseline."));
         Assert.Empty(known.Intersect(oldIds));
     }
 
+    // A database the old chain built has exactly Baseline's schema, so it is built here to Baseline
+    // only; the migrations added after the squash then run on it like on any adopted database.
     [Fact]
     public async Task ProductionShapedHistory_IsAdopted_AndNothingElseChanges()
     {
         var connectionString = await SchemaTestDatabase.CreateAsync(_pg, "adopt_");
+        var latestConnectionString = await SchemaTestDatabase.CreateAsync(_pg, "adopt_latest_");
         try
         {
             var oldIds = ReadOldIds();
-            await SchemaTestDatabase.MigrateToLatestAsync(connectionString);
+            await SchemaTestDatabase.MigrateToAsync(connectionString, MigrationBaseline.BaselineMigrationId);
             await ReplaceHistoryAsync(connectionString, oldIds);
-            var before = await SchemaTestDatabase.FingerprintAsync(connectionString);
+            await SchemaTestDatabase.MigrateToLatestAsync(latestConnectionString);
+            var latest = await SchemaTestDatabase.FingerprintAsync(latestConnectionString);
 
+            List<string> known;
             await using (var db = SchemaTestDatabase.CreateContext(connectionString))
             {
                 // Without adoption EF would try to build every table again.
-                Assert.Equal(new[] { MigrationBaseline.BaselineMigrationId }, db.Database.GetPendingMigrations());
+                known = db.Database.GetMigrations().ToList();
+                Assert.Equal(known, db.Database.GetPendingMigrations());
 
                 // What Program.cs runs at start-up, in the same order.
                 Assert.Equal(MigrationBaseline.Outcome.Adopted, await MigrationBaseline.AdoptAsync(db));
@@ -75,12 +84,15 @@ public class MigrationBaselineAdoptionTests
                 Assert.Empty(db.Database.GetPendingMigrations());
             }
 
-            // The schema did not move, the old rows are all kept, and Baseline's row was added.
-            Assert.Equal(before, await SchemaTestDatabase.FingerprintAsync(connectionString));
+            // Baseline did not run again: only the later migrations moved the schema, to exactly what
+            // a fresh database gets. The old rows are all kept, and Baseline's row (plus one per later
+            // migration) was added.
+            var before = await SchemaTestDatabase.FingerprintAsync(connectionString);
+            Assert.Equal(latest, before);
             var history = await ReadHistoryAsync(connectionString);
-            Assert.Equal(oldIds.Count + 1, history.Count);
+            Assert.Equal(oldIds.Count + known.Count, history.Count);
             Assert.All(oldIds, id => Assert.Equal(OldProductVersion, history[id]));
-            Assert.Equal(ProductInfo.GetVersion(), history[MigrationBaseline.BaselineMigrationId]);
+            Assert.All(known, id => Assert.Equal(ProductInfo.GetVersion(), history[id]));
 
             // Running it again (the next restart) changes nothing.
             await using (var db = SchemaTestDatabase.CreateContext(connectionString))
@@ -105,6 +117,7 @@ public class MigrationBaselineAdoptionTests
         finally
         {
             await SchemaTestDatabase.DropAsync(_pg, connectionString);
+            await SchemaTestDatabase.DropAsync(_pg, latestConnectionString);
         }
     }
 
@@ -136,7 +149,7 @@ public class MigrationBaselineAdoptionTests
         }
     }
 
-    // A new, empty database: nothing to adopt, and Migrate builds it from Baseline alone.
+    // A new, empty database: nothing to adopt, and Migrate builds it from Baseline and the migrations after it.
     [Fact]
     public async Task FreshDatabase_IsBuiltFromBaseline()
     {
@@ -148,7 +161,7 @@ public class MigrationBaselineAdoptionTests
                 Assert.Equal(MigrationBaseline.Outcome.FreshDatabase, await MigrationBaseline.AdoptAsync(db));
                 db.Database.Migrate();
 
-                Assert.Equal(new[] { MigrationBaseline.BaselineMigrationId }, db.Database.GetAppliedMigrations());
+                SchemaTestDatabase.AssertBuiltFromBaseline(db);
                 Assert.Empty(db.Database.GetPendingMigrations());
 
                 // The next start-up finds Baseline's own row and does nothing.
@@ -206,7 +219,7 @@ public class MigrationBaselineAdoptionTests
             await using var db = SchemaTestDatabase.CreateContext(connectionString);
             Assert.Equal(MigrationBaseline.Outcome.FreshDatabase, await MigrationBaseline.AdoptAsync(db));
             db.Database.Migrate();
-            Assert.Equal(new[] { MigrationBaseline.BaselineMigrationId }, db.Database.GetAppliedMigrations());
+            SchemaTestDatabase.AssertBuiltFromBaseline(db);
         }
         finally
         {
@@ -228,7 +241,7 @@ public class MigrationBaselineAdoptionTests
             await using var db = SchemaTestDatabase.CreateContext(connectionString);
             Assert.Equal(MigrationBaseline.Outcome.EmptyHistory, await MigrationBaseline.AdoptAsync(db));
             db.Database.Migrate();
-            Assert.Equal(new[] { MigrationBaseline.BaselineMigrationId }, db.Database.GetAppliedMigrations());
+            SchemaTestDatabase.AssertBuiltFromBaseline(db);
         }
         finally
         {

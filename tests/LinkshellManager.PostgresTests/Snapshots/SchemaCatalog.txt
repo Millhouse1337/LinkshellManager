@@ -279,6 +279,7 @@ column	ClaimShieldCaptures.EventId	integer
 column	ClaimShieldCaptures.Id	integer NOT NULL IDENTITY BY DEFAULT
 column	ClaimShieldCaptures.LinkshellId	integer NOT NULL
 column	ClaimShieldCaptures.MonsterName	character varying(128) NOT NULL
+column	ClaimShieldCaptures.SpawnKey	character varying(256)
 column	ClaimShieldCaptures.TotalPlayers	integer NOT NULL
 column	ClaimShieldCaptures.Won	boolean NOT NULL
 column	DiscordActivityUsers.Avatar	character varying(128)
@@ -435,6 +436,7 @@ column	Events.LinkshellId	integer NOT NULL
 column	Events.NextWindowAt	timestamp with time zone
 column	Events.PartySetupId	integer
 column	Events.SourceTodId	integer
+column	Events.SpawnKey	character varying(256)
 column	Events.SpawnWindowCount	integer
 column	Events.SpawnWindowMinutes	integer
 column	Events.StartTime	timestamp with time zone
@@ -571,6 +573,7 @@ column	LinkshellMonsterTimings.LinkshellId	integer NOT NULL
 column	LinkshellMonsterTimings.MonsterName	character varying(128) NOT NULL
 column	LinkshellMonsterTimings.NormalizedMonsterName	character varying(128) NOT NULL
 column	LinkshellMonsterTimings.SortOrder	integer NOT NULL
+column	LinkshellMonsterTimings.SpawnKey	character varying(256)
 column	LinkshellMonsterTimings.UpdatedAtUtc	timestamp with time zone NOT NULL
 column	LinkshellMonsterTimings.WindowCadenceMinutes	integer
 column	LinkshellMonsterTimings.WindowCount	integer
@@ -676,6 +679,7 @@ column	PartySetups.LinkshellId	integer NOT NULL
 column	PartySetups.Name	character varying(128) NOT NULL
 column	PartySetups.Notes	character varying(1024)
 column	PartySetups.OwnerEventId	integer
+column	PartySetups.SpawnKey	character varying(256)
 column	PartySetups.UpdatedAt	timestamp with time zone NOT NULL
 column	PendingTodSubmissions.AdditionalSeconds	integer NOT NULL DEFAULT 0
 column	PendingTodSubmissions.Claim	boolean
@@ -1394,6 +1398,7 @@ index	ClaimShieldCaptureMembers.PK_ClaimShieldCaptureMembers	CREATE UNIQUE INDEX
 index	ClaimShieldCaptures.IX_ClaimShieldCaptures_EventHistoryId	CREATE INDEX "IX_ClaimShieldCaptures_EventHistoryId" ON public."ClaimShieldCaptures" USING btree ("EventHistoryId")
 index	ClaimShieldCaptures.IX_ClaimShieldCaptures_EventId	CREATE UNIQUE INDEX "IX_ClaimShieldCaptures_EventId" ON public."ClaimShieldCaptures" USING btree ("EventId")
 index	ClaimShieldCaptures.IX_ClaimShieldCaptures_LinkshellId_CapturedAtUtc	CREATE INDEX "IX_ClaimShieldCaptures_LinkshellId_CapturedAtUtc" ON public."ClaimShieldCaptures" USING btree ("LinkshellId", "CapturedAtUtc")
+index	ClaimShieldCaptures.IX_ClaimShieldCaptures_LinkshellId_SpawnKey	CREATE INDEX "IX_ClaimShieldCaptures_LinkshellId_SpawnKey" ON public."ClaimShieldCaptures" USING btree ("LinkshellId", "SpawnKey")
 index	ClaimShieldCaptures.PK_ClaimShieldCaptures	CREATE UNIQUE INDEX "PK_ClaimShieldCaptures" ON public."ClaimShieldCaptures" USING btree ("Id")
 index	DiscordActivityUsers.IX_DiscordActivityUsers_DiscordUserId	CREATE UNIQUE INDEX "IX_DiscordActivityUsers_DiscordUserId" ON public."DiscordActivityUsers" USING btree ("DiscordUserId")
 index	DiscordActivityUsers.IX_DiscordActivityUsers_IdentityUserId	CREATE INDEX "IX_DiscordActivityUsers_IdentityUserId" ON public."DiscordActivityUsers" USING btree ("IdentityUserId")
@@ -1436,6 +1441,7 @@ index	EventPartySlotSignups.PK_EventPartySlotSignups	CREATE UNIQUE INDEX "PK_Eve
 index	EventWindowRosterSnapshots.IX_EventWindowRosterSnapshots_EventId_WindowNumber	CREATE INDEX "IX_EventWindowRosterSnapshots_EventId_WindowNumber" ON public."EventWindowRosterSnapshots" USING btree ("EventId", "WindowNumber")
 index	EventWindowRosterSnapshots.PK_EventWindowRosterSnapshots	CREATE UNIQUE INDEX "PK_EventWindowRosterSnapshots" ON public."EventWindowRosterSnapshots" USING btree ("Id")
 index	Events.IX_Events_LinkshellId	CREATE INDEX "IX_Events_LinkshellId" ON public."Events" USING btree ("LinkshellId")
+index	Events.IX_Events_LinkshellId_SpawnKey	CREATE INDEX "IX_Events_LinkshellId_SpawnKey" ON public."Events" USING btree ("LinkshellId", "SpawnKey")
 index	Events.IX_Events_PartySetupId	CREATE INDEX "IX_Events_PartySetupId" ON public."Events" USING btree ("PartySetupId")
 index	Events.IX_Events_SourceTodId	CREATE INDEX "IX_Events_SourceTodId" ON public."Events" USING btree ("SourceTodId")
 index	Events.PK_Events	CREATE UNIQUE INDEX "PK_Events" ON public."Events" USING btree ("Id")
@@ -1477,6 +1483,7 @@ index	LinkshellChannelRoutes.IX_LinkshellChannelRoutes_OneLootRoute	CREATE UNIQU
 index	LinkshellChannelRoutes.IX_LinkshellChannelRoutes_OneTodBoardRoute	CREATE UNIQUE INDEX "IX_LinkshellChannelRoutes_OneTodBoardRoute" ON public."LinkshellChannelRoutes" USING btree ("LinkshellId") WHERE "PostTodBoard"
 index	LinkshellChannelRoutes.PK_LinkshellChannelRoutes	CREATE UNIQUE INDEX "PK_LinkshellChannelRoutes" ON public."LinkshellChannelRoutes" USING btree ("Id")
 index	LinkshellMonsterTimings.IX_LinkshellMonsterTimings_LinkshellId_NormalizedMonsterName	CREATE UNIQUE INDEX "IX_LinkshellMonsterTimings_LinkshellId_NormalizedMonsterName" ON public."LinkshellMonsterTimings" USING btree ("LinkshellId", "NormalizedMonsterName")
+index	LinkshellMonsterTimings.IX_LinkshellMonsterTimings_LinkshellId_SpawnKey	CREATE INDEX "IX_LinkshellMonsterTimings_LinkshellId_SpawnKey" ON public."LinkshellMonsterTimings" USING btree ("LinkshellId", "SpawnKey")
 index	LinkshellMonsterTimings.PK_LinkshellMonsterTimings	CREATE UNIQUE INDEX "PK_LinkshellMonsterTimings" ON public."LinkshellMonsterTimings" USING btree ("Id")
 index	LinkshellPresences.IX_LinkshellPresences_LinkshellId_CharacterName	CREATE UNIQUE INDEX "IX_LinkshellPresences_LinkshellId_CharacterName" ON public."LinkshellPresences" USING btree ("LinkshellId", "CharacterName")
 index	LinkshellPresences.IX_LinkshellPresences_LinkshellId_LastSeenUtc	CREATE INDEX "IX_LinkshellPresences_LinkshellId_LastSeenUtc" ON public."LinkshellPresences" USING btree ("LinkshellId", "LastSeenUtc")

@@ -80,7 +80,7 @@ public class MigrationNoticeLoggingTests
             });
 
             Assert.Equal(MigrationBaseline.Outcome.FreshDatabase, adoption);
-            Assert.Equal(new[] { MigrationBaseline.BaselineMigrationId }, db.Database.GetAppliedMigrations());
+            SchemaTestDatabase.AssertBuiltFromBaseline(db);
             Assert.DoesNotContain(log.Entries, e => e.Level >= LogLevel.Warning);
 
             // A database built from Baseline has nothing to warn about today.

@@ -50,6 +50,12 @@ public class ClaimShieldCapture
     [MaxLength(128)]
     public string MonsterName { get; set; } = string.Empty;
 
+    // MonsterName's one-per-spawn key (HnmConfig.SpawnKey), stamped on every save
+    // (ApplicationDbContext.StampDerivedColumns). Null when the name is blank. Added in Round 5
+    // (AddCampSpawnKeys) for claim statistics; nothing reads it yet.
+    [MaxLength(256)]
+    public string? SpawnKey { get; set; }
+
     public bool Won { get; set; }
 
     public int TotalPlayers { get; set; }

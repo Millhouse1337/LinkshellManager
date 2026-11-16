@@ -1286,6 +1286,10 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)");
 
+                    b.Property<string>("SpawnKey")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
                     b.Property<int>("TotalPlayers")
                         .HasColumnType("integer");
 
@@ -1300,6 +1304,8 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .IsUnique();
 
                     b.HasIndex("LinkshellId", "CapturedAtUtc");
+
+                    b.HasIndex("LinkshellId", "SpawnKey");
 
                     b.ToTable("ClaimShieldCaptures", (string)null);
                 });
@@ -1658,6 +1664,10 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<int?>("SourceTodId")
                         .HasColumnType("integer");
 
+                    b.Property<string>("SpawnKey")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
                     b.Property<int?>("SpawnWindowCount")
                         .HasColumnType("integer");
 
@@ -1708,6 +1718,8 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.HasIndex("PartySetupId");
 
                     b.HasIndex("SourceTodId");
+
+                    b.HasIndex("LinkshellId", "SpawnKey");
 
                     b.ToTable("Events");
                 });
@@ -2844,6 +2856,10 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<int>("SortOrder")
                         .HasColumnType("integer");
 
+                    b.Property<string>("SpawnKey")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
                     b.Property<DateTime>("UpdatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -2861,6 +2877,8 @@ namespace LinkshellManagerDiscordApp.Migrations
 
                     b.HasIndex("LinkshellId", "NormalizedMonsterName")
                         .IsUnique();
+
+                    b.HasIndex("LinkshellId", "SpawnKey");
 
                     b.ToTable("LinkshellMonsterTimings", (string)null);
                 });
@@ -3062,6 +3080,10 @@ namespace LinkshellManagerDiscordApp.Migrations
 
                     b.Property<int?>("OwnerEventId")
                         .HasColumnType("integer");
+
+                    b.Property<string>("SpawnKey")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
