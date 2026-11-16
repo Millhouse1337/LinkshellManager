@@ -73,8 +73,10 @@ public sealed class AppUserProfileService
         // Characters on save). Kept alts are not written at all.
         if (!preserveExistingAlts)
         {
+#pragma warning disable CS0618 // Round 5 writer: the alt columns are still the written source.
             user.AltCharacterName1 = normalizedAlt1;
             user.AltCharacterName2 = normalizedAlt2;
+#pragma warning restore CS0618
         }
 
         var displayName = AccountCharacters.DisplayName(user);
@@ -85,7 +87,9 @@ public sealed class AppUserProfileService
             .ToListAsync(cancellationToken);
         foreach (var membership in memberships)
         {
+#pragma warning disable CS0618 // Round 5 writer: the roster name is a copy of the main.
             membership.CharacterName = displayName;
+#pragma warning restore CS0618
         }
 
         // Open sign-ups follow a RENAMED character, and only that one. A member signed up on an alt

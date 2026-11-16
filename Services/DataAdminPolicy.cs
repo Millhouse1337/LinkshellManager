@@ -121,7 +121,9 @@ public sealed class DataAdminPolicy
                 // IsSuperAdmin is seeded from configuration only (Program.cs); Email/UserName drive login.
                 EditableAllowList = new[]
                 {
+#pragma warning disable CS0618 // Round 5: Data Admin still edits the alt columns, the written source (R5.5 makes them read-only).
                     nameof(AppUser.CharacterName), nameof(AppUser.AltCharacterName1), nameof(AppUser.AltCharacterName2),
+#pragma warning restore CS0618
                     nameof(AppUser.TimeZone), nameof(AppUser.PrimaryLinkshellId),
                     nameof(AppUser.IsPlaceholder),
                 },

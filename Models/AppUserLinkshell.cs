@@ -34,6 +34,9 @@ public class AppUserLinkshell
     [ForeignKey(nameof(LinkshellId))]
     public Linkshell? Linkshell { get; set; }
 
+    // The roster name. Round 5: still written (a copy of the account's main name), never read: the
+    // roster shows the account's CharacterName and names resolve through the account's Characters.
+    [Obsolete("Round 5: the roster name is not read. Use AppUser.CharacterName (the account main) instead.")]
     public string? CharacterName { get; set; }
 
     public string? Rank { get; set; }

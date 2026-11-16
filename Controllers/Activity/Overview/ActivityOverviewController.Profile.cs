@@ -57,6 +57,7 @@ public sealed partial class ActivityOverviewController
         // The main character's jobs live on the account, in the addon's FFXI-job-id format; the
         // client sends catalog-aligned arrays (index 0 = WAR ... 14 = SMN), merged into what the
         // account already holds.
+#pragma warning disable CS0618 // Round 5 writer: jobs and crafts are merged into the account columns, still the written source (R5.5 moves it to Characters).
         var mainJobsChanged = false;
         if (request.JobLevels is { Length: > 0 } || request.StrongJobs is { Length: > 0 } || request.MeritJobs is { Length: > 0 })
         {
@@ -156,6 +157,7 @@ public sealed partial class ActivityOverviewController
             appUser.Alt2CraftLevels = request.Alt2CraftLevels;
             craftsChanged = true;
         }
+#pragma warning restore CS0618
 
         // The account itself (crafts, alts and the main's jobs) is saved through Identity.
         if (craftsChanged || mainJobsChanged)

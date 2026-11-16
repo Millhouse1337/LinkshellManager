@@ -265,7 +265,9 @@ public sealed partial class AddonApiController
                 {
                     issuerUser.CharacterName = selfName;
                     // The roster name is still written as a copy of the main (never read).
+#pragma warning disable CS0618 // Round 5 writer: the roster name is still written, as a copy of the main (never read).
                     issuerMembership.CharacterName = selfName;
+#pragma warning restore CS0618
                 }
 
                 // Make sure the lookup picks up the freshly-known name even

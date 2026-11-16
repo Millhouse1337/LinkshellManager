@@ -6,6 +6,8 @@ using NpgsqlTypes;
 
 namespace LinkshellManagerDiscordApp.Data;
 
+#pragma warning disable CS0618 // Round 5: this copies the account columns (the written source) into Characters; it is their one reader.
+
 // Keeps the Characters table (AddCharacters) equal to the accounts' own name and job columns.
 //
 // The copy is made by SQL that reads the account row AS SAVED, run right after the save

@@ -84,8 +84,10 @@ public sealed class ManualMemberService
             }
             if (match.AppUser is not null)
             {
+#pragma warning disable CS0618 // Round 5 writer: the account columns are still the written source (R5.5 moves it to Characters).
                 if (!string.IsNullOrEmpty(a1)) { match.AppUser.AltCharacterName1 = a1; }
                 if (!string.IsNullOrEmpty(a2)) { match.AppUser.AltCharacterName2 = a2; }
+#pragma warning restore CS0618
             }
             await _context.SaveChangesAsync(cancellationToken);
             return new CreateResult(true, null, match.AppUserId);
@@ -95,8 +97,10 @@ public sealed class ManualMemberService
         {
             UserName = $"placeholder-{Guid.NewGuid():N}",
             CharacterName = main,
+#pragma warning disable CS0618 // Round 5 writer: the account columns are still the written source (R5.5 moves it to Characters).
             AltCharacterName1 = a1,
             AltCharacterName2 = a2,
+#pragma warning restore CS0618
             IsPlaceholder = true,
         };
         var createResult = await _userManager.CreateAsync(placeholder);
@@ -115,7 +119,9 @@ public sealed class ManualMemberService
             DiscordIdConfirmed = true,
             LinkshellDkp = 0,
             DateJoined = DateTime.UtcNow,
+#pragma warning disable CS0618 // Round 5 writer: the roster name is still written, as a copy of the main (never read).
             CharacterName = main,
+#pragma warning restore CS0618
             Rank = LinkshellRanks.Member,
             Status = "Active",
         });
@@ -155,8 +161,10 @@ public sealed class ManualMemberService
         {
             if (match.AppUser is not null)
             {
+#pragma warning disable CS0618 // Round 5 writer: the account columns are still the written source (R5.5 moves it to Characters).
                 if (!string.IsNullOrEmpty(a1) && string.IsNullOrWhiteSpace(match.AppUser.AltCharacterName1)) { match.AppUser.AltCharacterName1 = a1; }
                 if (!string.IsNullOrEmpty(a2) && string.IsNullOrWhiteSpace(match.AppUser.AltCharacterName2)) { match.AppUser.AltCharacterName2 = a2; }
+#pragma warning restore CS0618
                 await _context.SaveChangesAsync(cancellationToken);
             }
             return new CreateResult(true, null, match.AppUserId);
@@ -166,8 +174,10 @@ public sealed class ManualMemberService
         {
             UserName = $"placeholder-{Guid.NewGuid():N}",
             CharacterName = main,
+#pragma warning disable CS0618 // Round 5 writer: the account columns are still the written source (R5.5 moves it to Characters).
             AltCharacterName1 = a1,
             AltCharacterName2 = a2,
+#pragma warning restore CS0618
             IsPlaceholder = true,
         };
         var createResult = await _userManager.CreateAsync(placeholder);
@@ -182,7 +192,9 @@ public sealed class ManualMemberService
             LinkshellId = linkshellId,
             LinkshellDkp = 0,
             DateJoined = DateTime.UtcNow,
+#pragma warning disable CS0618 // Round 5 writer: the roster name is still written, as a copy of the main (never read).
             CharacterName = main,
+#pragma warning restore CS0618
             Rank = LinkshellRanks.Member,
             Status = "Active",
         });

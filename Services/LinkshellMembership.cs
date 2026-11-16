@@ -14,7 +14,9 @@ public static class LinkshellMembership
         LinkshellId = linkshellId,
         LinkshellDkp = 0,
         DateJoined = joinedAtUtc,
+#pragma warning disable CS0618 // Round 5 writer: the roster name is still written, as a copy of the main (never read).
         CharacterName = user.CharacterName ?? user.UserName,
+#pragma warning restore CS0618
         Rank = LinkshellRanks.Member,
         Status = "Active"
     };

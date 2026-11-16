@@ -133,6 +133,7 @@ public sealed class PlaceholderClaimService
         {
             realUser.CharacterName = placeholder.CharacterName;
         }
+#pragma warning disable CS0618 // Round 5 writer: the account columns are still the written source (R5.5 moves it to Characters).
         if (string.IsNullOrWhiteSpace(realUser.AltCharacterName1) && !string.IsNullOrWhiteSpace(placeholder.AltCharacterName1))
         {
             realUser.AltCharacterName1 = placeholder.AltCharacterName1;
@@ -148,6 +149,7 @@ public sealed class PlaceholderClaimService
         realUser.JobLevels ??= placeholder.JobLevels;
         realUser.StrongJobs ??= placeholder.StrongJobs;
         realUser.MeritJobs ??= placeholder.MeritJobs;
+#pragma warning restore CS0618
         await _db.SaveChangesAsync(cancellationToken);
 
         // Delete the placeholder only when nothing points at it any more. Something left means a

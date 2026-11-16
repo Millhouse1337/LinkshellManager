@@ -314,7 +314,9 @@ public sealed class InviteCandidateService
                 LinkshellId = linkshellId,
                 LinkshellDkp = 0,
                 DateJoined = DateTime.UtcNow,
+#pragma warning disable CS0618 // Round 5 writer: the roster name is still written, as a copy of the main (never read).
                 CharacterName = targetUser?.CharacterName ?? targetUser?.UserName ?? displayName,
+#pragma warning restore CS0618
                 Rank = LinkshellRanks.Member,
                 Status = "Active"
             });

@@ -6,6 +6,14 @@ namespace LinkshellManagerDiscordApp.Models;
 
 public class AppUser : IdentityUser
 {
+    // Round 5 (names): the alt names and every job and craft column below are still WRITTEN here
+    // (and copied into Characters on save, CharacterSync), but nothing reads them any more: reads go
+    // to Characters (AccountCharacters). [Obsolete] plus CS0618-as-error in the app project makes
+    // the compiler refuse a new reader; the few writers left say so with #pragma.
+    internal const string ReadCharactersInstead =
+        "Round 5: read the account's Characters rows (AccountCharacters) instead.";
+
+    // The main character's name. Still read and written: it is the account's display name.
     public string? CharacterName { get; set; }
 
     // Every character of the account (slot 0 main, 1 and 2 the alts): the read side of the names.
@@ -15,21 +23,26 @@ public class AppUser : IdentityUser
     // linkshell is looking. Same formats as the alts' columns below (levels and strong flags
     // FFXI-job-id-indexed, merit notes catalog-aligned; see ProfileJobLevels). They used to live
     // only on each membership; the migration AccountJobsAndKeyItemAccounts copied them here, every
-    // read and write now uses these (MainCharacterJobs.Write), and Round4Contract dropped the old
-    // membership copies. Null when never set.
+    // write goes through MainCharacterJobs.Write (reads use Characters since Round 5), and
+    // Round4Contract dropped the old membership copies. Null when never set.
     [Column(TypeName = "jsonb")]
+    [Obsolete(ReadCharactersInstead)]
     public int[]? JobLevels { get; set; }
 
     [Column(TypeName = "jsonb")]
+    [Obsolete(ReadCharactersInstead)]
     public int[]? StrongJobs { get; set; }
 
     [Column(TypeName = "jsonb")]
+    [Obsolete(ReadCharactersInstead)]
     public string[]? MeritJobs { get; set; }
 
     [MaxLength(64)]
+    [Obsolete(ReadCharactersInstead)]
     public string? AltCharacterName1 { get; set; }
 
     [MaxLength(64)]
+    [Obsolete(ReadCharactersInstead)]
     public string? AltCharacterName2 { get; set; }
 
     // Per-job levels for the two alt characters, in the same FFXI-job-id-indexed
@@ -37,9 +50,11 @@ public class AppUser : IdentityUser
     // linkshell membership of their own, so their job lists live here on the
     // account. Null when the alt has no name / no levels set.
     [Column(TypeName = "jsonb")]
+    [Obsolete(ReadCharactersInstead)]
     public int[]? Alt1JobLevels { get; set; }
 
     [Column(TypeName = "jsonb")]
+    [Obsolete(ReadCharactersInstead)]
     public int[]? Alt2JobLevels { get; set; }
 
     // Per-job "strong" flags for the two alt characters, parallel to Alt1/Alt2
@@ -47,9 +62,11 @@ public class AppUser : IdentityUser
     // A non-zero entry marks the job as well-geared/merited. Null when the alt has
     // no name / no flags set.
     [Column(TypeName = "jsonb")]
+    [Obsolete(ReadCharactersInstead)]
     public int[]? Alt1StrongJobs { get; set; }
 
     [Column(TypeName = "jsonb")]
+    [Obsolete(ReadCharactersInstead)]
     public int[]? Alt2StrongJobs { get; set; }
 
     // Per-job free-text merit notes for the two alt characters, catalog-aligned
@@ -57,9 +74,11 @@ public class AppUser : IdentityUser
     // flags. Null when the
     // alt has no name / no merits set.
     [Column(TypeName = "jsonb")]
+    [Obsolete(ReadCharactersInstead)]
     public string[]? Alt1MeritJobs { get; set; }
 
     [Column(TypeName = "jsonb")]
+    [Obsolete(ReadCharactersInstead)]
     public string[]? Alt2MeritJobs { get; set; }
 
     // Per-craft levels for the main character and the two alts, in CraftCatalog
@@ -67,12 +86,15 @@ public class AppUser : IdentityUser
     // vary by linkshell), so — unlike per-membership job levels — all three live
     // here on the account. Null when unset / the alt has no name.
     [Column(TypeName = "jsonb")]
+    [Obsolete(ReadCharactersInstead)]
     public int[]? CraftLevels { get; set; }
 
     [Column(TypeName = "jsonb")]
+    [Obsolete(ReadCharactersInstead)]
     public int[]? Alt1CraftLevels { get; set; }
 
     [Column(TypeName = "jsonb")]
+    [Obsolete(ReadCharactersInstead)]
     public int[]? Alt2CraftLevels { get; set; }
 
     public string? TimeZone { get; set; }
