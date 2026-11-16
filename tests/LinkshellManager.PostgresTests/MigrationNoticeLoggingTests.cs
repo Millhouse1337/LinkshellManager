@@ -14,7 +14,7 @@ namespace LinkshellManager.PostgresTests;
 // Round 5, ops item 6. A migration's RAISE WARNING used to be invisible: Npgsql logs Postgres
 // notices at Debug and the app logs at Information. MigrationNotices sends them to the app log,
 // and MigrationHealth warns about a schema left half-done (a NOT VALID check, an invalid index,
-// or a guarded index a migration skipped).
+// a guarded index a migration skipped or left plain, or a guarded NOT NULL it skipped).
 //
 // Each test has its OWN database inside the test container, dropped at the end.
 [Collection("postgres")]
@@ -132,6 +132,58 @@ public class MigrationNoticeLoggingTests
             var warning = Assert.Single(log.Entries, e => e.Level == LogLevel.Warning);
             Assert.Contains("IX_JournalEntries_OneReversalPerEntry", warning.Message);
             Assert.Contains("missing", warning.Message);
+        }
+        finally
+        {
+            await SchemaTestDatabase.DropAsync(_pg, connectionString);
+        }
+    }
+
+    // A guarded migration that skips its unique index can leave the plain index of the same name
+    // behind (CampSpawnKeySwitch does): present, but not doing its job.
+    [Fact]
+    public async Task Health_GuardedIndexThatIsNotUnique_IsLogged()
+    {
+        var connectionString = await SchemaTestDatabase.CreateAsync(_pg, "health_plain_");
+        try
+        {
+            await SchemaTestDatabase.MigrateToLatestAsync(connectionString);
+            await SchemaTestDatabase.ExecuteAsync(connectionString,
+                "DROP INDEX \"IX_JournalEntries_OneReversalPerEntry\"; " +
+                "CREATE INDEX \"IX_JournalEntries_OneReversalPerEntry\" ON \"JournalEntries\" (\"ReversesJournalEntryId\")");
+            var log = new CapturingLogger();
+            await using var db = SchemaTestDatabase.CreateContext(connectionString);
+
+            Assert.Equal(1, await MigrationHealth.LogProblemsAsync(db, log, CancellationToken.None));
+            var warning = Assert.Single(log.Entries, e => e.Level == LogLevel.Warning);
+            Assert.Contains("IX_JournalEntries_OneReversalPerEntry", warning.Message);
+            Assert.Contains("not unique", warning.Message);
+        }
+        finally
+        {
+            await SchemaTestDatabase.DropAsync(_pg, connectionString);
+        }
+    }
+
+    // MembershipRoleRequired skips NOT NULL with a WARNING when a member has no role; the health
+    // check says so again on every start-up until it is fixed.
+    [Fact]
+    public async Task Health_GuardedColumnThatAllowsNull_IsLogged()
+    {
+        var connectionString = await SchemaTestDatabase.CreateAsync(_pg, "health_null_");
+        try
+        {
+            await SchemaTestDatabase.MigrateToLatestAsync(connectionString);
+            Assert.Contains("AppUserLinkshells.LinkshellRoleId", MigrationHealth.GuardedNotNullColumns);
+            await SchemaTestDatabase.ExecuteAsync(connectionString,
+                "ALTER TABLE \"AppUserLinkshells\" ALTER COLUMN \"LinkshellRoleId\" DROP NOT NULL");
+            var log = new CapturingLogger();
+            await using var db = SchemaTestDatabase.CreateContext(connectionString);
+
+            Assert.Equal(1, await MigrationHealth.LogProblemsAsync(db, log, CancellationToken.None));
+            var warning = Assert.Single(log.Entries, e => e.Level == LogLevel.Warning);
+            Assert.Contains("AppUserLinkshells.LinkshellRoleId", warning.Message);
+            Assert.Contains("allows NULL", warning.Message);
         }
         finally
         {
