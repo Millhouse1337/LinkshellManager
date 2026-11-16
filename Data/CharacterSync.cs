@@ -1,36 +1,30 @@
-using System.Globalization;
 using LinkshellManagerDiscordApp.Models;
-using Microsoft.EntityFrameworkCore;
-using Npgsql;
-using NpgsqlTypes;
 
 namespace LinkshellManagerDiscordApp.Data;
 
-#pragma warning disable CS0618 // Round 5: this copies the account columns (the written source) into Characters; it is their one reader.
+#pragma warning disable CS0618 // Round 5: the account's old name columns, read only to turn them into Characters rows.
 
-// Keeps the Characters table (AddCharacters) equal to the accounts' own name and job columns.
+// What is left of the old copy from the account columns into Characters (AddCharacters).
 //
-// The copy is made by SQL that reads the account row AS SAVED, run right after the save
-// (ApplicationDbContext.SyncCharactersAsync), rather than by adding tracked rows to the save:
-// - two saves of one account at the same moment cannot both insert a slot and have one fail on the
-//   (AppUserId, Slot) key: INSERT ... ON CONFLICT DO UPDATE lets Postgres settle it;
-// - each copy first takes a per-account lock (see SyncSql), so two copies of one account run one
-//   after the other, and the later one reads the account as last saved;
-// - it runs on its own (inside a savepoint when the caller has a transaction), so a failure here is
-//   logged and never fails the user's save. The account's next save repairs it, and so does every
-//   start-up (ResyncAllAsync).
-// The InMemory test database has no SQL: there the same rules run in C# (DesiredRows).
+// Since Round 5 (R5.5) Characters is the only written source of names, jobs and crafts
+// (CharacterWriter), and the account columns are a mirror the save writes FROM Characters
+// (ApplicationDbContext.StampAccountsFromCharactersAsync). The copy the other way (a SQL copy after
+// every save and again at every start-up) is gone. Two rules of it stay:
 //
-// The rules (the migrations' too): names are trimmed of the same whitespace .NET's Trim removes
-// (TodDerivedSql.WhitespaceChars), a blank name has no row, a name longer than 256
-// characters has no row, and NormalizedName is lower(Name). Since CharactersSwitch, a slot that
-// repeats an earlier slot's name in the same account (an alt equal to the main, say) has no row
-// either: the earlier slot already gives that name to the account, and the unique
-// (AppUserId, NormalizedName) index allows one row per name per account.
+// - DesiredRows: the Characters rows an account's old columns describe. The save hook uses it for a
+//   brand-new account saved with names in its old columns and no Characters rows (only tests do that
+//   now), and the tests use it to describe members with the old columns.
+// - NameNotBlankCheckSql: the CK_Characters_Name_NotBlank check (part of the schema).
+//
+// The rules: names are trimmed of the same whitespace .NET's Trim removes
+// (TodDerivedSql.WhitespaceChars), a blank name has no row, a name longer than 256 characters has no
+// row, NormalizedName is the lower-case name, and a slot that repeats an earlier slot's name in the
+// same account has no row (the unique (AppUserId, NormalizedName) index allows one row per name per
+// account).
 public static class CharacterSync
 {
-    // The AppUser properties the Characters rows are copied from. A save that changes none of
-    // them leaves Characters alone.
+    // The account's columns that are copies of its characters: the main's name first, then each
+    // slot's jobs and crafts. The save hook writes every one of them from Characters.
     public static readonly IReadOnlyList<string> SourceProperties = new[]
     {
         nameof(AppUser.CharacterName), nameof(AppUser.JobLevels), nameof(AppUser.StrongJobs),
@@ -43,96 +37,17 @@ public static class CharacterSync
 
     private const string Ws = TodDerivedSql.WhitespaceChars;
 
-    // One row per account per slot: (account, slot, trimmed name, jobs...). accountFilter is an
-    // extra WHERE on "AspNetUsers" u, or null for every account.
-    public static string SlotRowsSql(string? accountFilter) => $"""
-        SELECT u."Id" AS account, s.slot, s.nm, s.jl, s.sj, s.mj, s.cl
-        FROM "AspNetUsers" u
-        CROSS JOIN LATERAL (VALUES
-            (0::smallint, {TrimSql("u.\"CharacterName\"")}, u."JobLevels", u."StrongJobs", u."MeritJobs", u."CraftLevels"),
-            (1::smallint, {TrimSql("u.\"AltCharacterName1\"")}, u."Alt1JobLevels", u."Alt1StrongJobs", u."Alt1MeritJobs", u."Alt1CraftLevels"),
-            (2::smallint, {TrimSql("u.\"AltCharacterName2\"")}, u."Alt2JobLevels", u."Alt2StrongJobs", u."Alt2MeritJobs", u."Alt2CraftLevels")
-        ) AS s(slot, nm, jl, sj, mj, cl)
-        {(accountFilter is null ? "" : "WHERE " + accountFilter)}
-        """;
-
-    // Whether a slot row (alias s) gets a Characters row, before repeats are taken out. Never NULL.
-    public static readonly string KeepSql =
-        $"(s.nm IS NOT NULL AND s.nm ~ '[^{Ws}]' AND char_length(s.nm) <= {Character.MaxNameLength})";
-
-    // The name with the leading and trailing whitespace .NET's string.Trim removes taken off.
-    public static string TrimSql(string column) => $"regexp_replace({column}, '^[{Ws}]+|[{Ws}]+$', '', 'g')";
-
     // The check on Characters.Name: at least one character that is not whitespace.
     public static readonly string NameNotBlankCheckSql = $"\"Name\" ~ '[^{Ws}]'";
-
-    // The rows the accounts should have (same columns as SlotRowsSql): the kept slots, with a slot
-    // that repeats an earlier slot's name in the same account (ignoring capitals) left out.
-    public static string DesiredRowsSql(string? accountFilter) => $"""
-        SELECT k.account, k.slot, k.nm, k.jl, k.sj, k.mj, k.cl
-        FROM (
-            SELECT s.account, s.slot, s.nm, s.jl, s.sj, s.mj, s.cl,
-                   row_number() OVER (PARTITION BY s.account, lower(s.nm) ORDER BY s.slot) AS rn
-            FROM ({SlotRowsSql(accountFilter)}) s
-            WHERE {KeepSql}
-        ) k
-        WHERE k.rn = 1
-        """;
-
-    // pg_advisory_xact_lock(class, key) class for "copying this account's characters". Negative, so
-    // it never meets TodRecorder's locks (whose class is a linkshell id).
-    public const int LockClassId = -1128808786;
-
-    // Brings the given accounts' rows in line (@ids text[]; @now is the UpdatedAt of changed rows).
-    // Three statements, sent as one batch, so they run as one transaction of their own (or inside
-    // the caller's):
-    // 1. Lock each account, in a fixed order. A second copy of the same account waits here, and its
-    //    next statements then read the account as saved by now. The lock is held until the batch
-    //    (or the caller's transaction) ends. An advisory lock rather than FOR UPDATE on the account
-    //    row: only copies take it, so a copy never waits on, or deadlocks with, a user's own save.
-    // 2. Delete the rows that should not be there, and the rows whose name changed (ignoring
-    //    capitals). Deleting a renamed row before the insert is what lets a main and an alt swap
-    //    names in one save without breaking the one-name-per-account index half-way.
-    // 3. Insert new slots and update the ones that differ (a change of capitals, jobs, crafts).
-    //    Rows already equal are not touched, so UpdatedAt says when a row last changed.
-    public static readonly string SyncSql = $"""
-        SELECT pg_advisory_xact_lock({LockClassId}, l.key)
-        FROM (SELECT DISTINCT hashtext(a) AS key FROM unnest(@ids) AS a ORDER BY 1 OFFSET 0) l;
-
-        DELETE FROM "Characters" c
-        WHERE c."AppUserId" = ANY(@ids)
-          AND NOT EXISTS (
-              SELECT 1 FROM ({DesiredRowsSql("u.\"Id\" = ANY(@ids)")}) d
-              WHERE d.account = c."AppUserId" AND d.slot = c."Slot" AND lower(d.nm) = c."NormalizedName");
-
-        INSERT INTO "Characters" ("AppUserId", "Slot", "Name", "NormalizedName", "JobLevels", "StrongJobs", "MeritJobs", "CraftLevels", "UpdatedAt")
-        SELECT d.account, d.slot, d.nm, lower(d.nm), d.jl, d.sj, d.mj, d.cl, @now
-        FROM ({DesiredRowsSql("u.\"Id\" = ANY(@ids)")}) d
-        ORDER BY d.account, d.slot
-        ON CONFLICT ("AppUserId", "Slot") DO UPDATE SET
-            "Name" = EXCLUDED."Name",
-            "NormalizedName" = EXCLUDED."NormalizedName",
-            "JobLevels" = EXCLUDED."JobLevels",
-            "StrongJobs" = EXCLUDED."StrongJobs",
-            "MeritJobs" = EXCLUDED."MeritJobs",
-            "CraftLevels" = EXCLUDED."CraftLevels",
-            "UpdatedAt" = EXCLUDED."UpdatedAt"
-        WHERE ("Characters"."Name", "Characters"."NormalizedName", "Characters"."JobLevels",
-               "Characters"."StrongJobs", "Characters"."MeritJobs", "Characters"."CraftLevels")
-            IS DISTINCT FROM (EXCLUDED."Name", EXCLUDED."NormalizedName", EXCLUDED."JobLevels",
-               EXCLUDED."StrongJobs", EXCLUDED."MeritJobs", EXCLUDED."CraftLevels");
-        """;
 
     // One wanted Characters row, worked out in C#. The arrays are the account's own (not copies).
     public sealed record DesiredRow(
         short Slot, string Name, string NormalizedName,
         int[]? JobLevels, int[]? StrongJobs, string[]? MeritJobs, int[]? CraftLevels);
 
-    // The rows an account should have, by the same rules as DesiredRowsSql: .NET Trim, not blank,
-    // at most 256 characters (counted as Postgres counts them), lower-cased with ToLowerInvariant
-    // (Postgres lower() gives the same on the server's locale), and a repeat of an earlier slot's
-    // name left out. The InMemory test database copies with this; Postgres tests compare it with
-    // the SQL.
+    // The rows an account's old columns describe: .NET Trim, not blank, at most 256 characters
+    // (counted as Postgres counts them), lower-cased with ToLowerInvariant, and a repeat of an
+    // earlier slot's name left out.
     public static IReadOnlyList<DesiredRow> DesiredRows(AppUser user)
     {
         var slots = new (string? Name, int[]? Jobs, int[]? Strong, string[]? Merits, int[]? Crafts)[]
@@ -158,55 +73,5 @@ public static class CharacterSync
                 slots[slot].Jobs, slots[slot].Strong, slots[slot].Merits, slots[slot].Crafts));
         }
         return rows;
-    }
-
-    // The account's names that are too long to copy, as (slot, length in characters), for the log.
-    // Lengths are counted the way Postgres's char_length counts them (code points, after the trim).
-    public static IEnumerable<(short Slot, int Length)> TooLongNames(AppUser user)
-    {
-        var names = new[] { user.CharacterName, user.AltCharacterName1, user.AltCharacterName2 };
-        for (short slot = 0; slot < names.Length; slot++)
-        {
-            var trimmed = names[slot]?.Trim();
-            if (string.IsNullOrEmpty(trimmed))
-            {
-                continue;
-            }
-            var length = trimmed.EnumerateRunes().Count();
-            if (length > Character.MaxNameLength)
-            {
-                yield return (slot, length);
-            }
-        }
-    }
-
-    internal static string Describe(IEnumerable<(short Slot, int Length)> names) =>
-        string.Join(", ", names.Select(name => string.Create(CultureInfo.InvariantCulture, $"slot {name.Slot} ({name.Length} characters)")));
-    // SyncSql's two parameters.
-    public static object[] Parameters(IEnumerable<string> accountIds, DateTime now) => new object[]
-    {
-        new NpgsqlParameter("ids", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = accountIds.ToArray() },
-        new NpgsqlParameter("now", NpgsqlDbType.TimestampTz) { Value = now },
-    };
-
-    // Accounts per SyncSql run in ResyncAllAsync: each takes one advisory lock per account, and
-    // the server's lock table is not unlimited.
-    internal const int ResyncBatchSize = 200;
-
-    // Copies every account again. Program.cs runs it at start-up, right after the migrations, so a
-    // copy that failed (or one an older build skipped after a rollback) never outlives a restart.
-    // Rows that are already right are not touched. Returns the number of accounts checked.
-    public static async Task<int> ResyncAllAsync(ApplicationDbContext db, CancellationToken cancellationToken)
-    {
-        if (!db.Database.IsRelational())
-        {
-            return 0;
-        }
-        var ids = await db.Users.AsNoTracking().OrderBy(user => user.Id).Select(user => user.Id).ToListAsync(cancellationToken);
-        foreach (var batch in ids.Chunk(ResyncBatchSize))
-        {
-            await db.Database.ExecuteSqlRawAsync(SyncSql, Parameters(batch, DateTime.UtcNow), cancellationToken);
-        }
-        return ids.Count;
     }
 }

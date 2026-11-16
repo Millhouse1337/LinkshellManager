@@ -5,8 +5,8 @@ using Microsoft.EntityFrameworkCore.ChangeTracking;
 
 namespace LinkshellManagerDiscordApp.Data
 {
-    // Round 5 (R5.5): Characters is where names, jobs and crafts are written (CharacterWriter). Every
-    // save then copies the result onto the places that still hold a copy:
+    // Round 5 (R5.5): Characters is the only place names, jobs and crafts are written
+    // (CharacterWriter). Every save then copies the result onto the places that still hold a copy:
     //
     // 1. AppUser.CharacterName, the account's display name: always the main's (slot 0) name, or null
     //    when the account has no main. Derived, the same way Rank follows the role.
@@ -17,32 +17,35 @@ namespace LinkshellManagerDiscordApp.Data
     //    before still does, so every new membership, every membership that changes account, and every
     //    membership of an account whose main is renamed gets the account's main name.
     //
-    // Only accounts whose Characters rows change in the save are touched (their other rows are read
+    // Only accounts whose Characters rows change in the save are copied to (their other rows are read
     // from the database). No SQL is run after the save: everything is part of the save itself.
+    //
+    // Two guards keep the copies exact when some code still writes the account columns itself:
+    // - an EXISTING account whose copy columns were changed in a save that does not change its
+    //   Characters rows gets the old values back, and a Warning is logged (use CharacterWriter);
+    // - a NEW account saved with names in its old columns and no Characters rows gets those names as
+    //   its Characters rows (CharacterSync.DesiredRows; names over CharacterWriter.MaxNameLength are
+    //   left out), and a Warning is logged. Only tests still create accounts that way.
     public partial class ApplicationDbContext
     {
         // The account columns that are copies of the account's characters (the main's name first).
-        private static readonly string[] AccountNameColumns =
-        {
-            nameof(AppUser.CharacterName),
-#pragma warning disable CS0618 // Round 5: the mirror of Characters, written only here.
-            nameof(AppUser.JobLevels), nameof(AppUser.StrongJobs), nameof(AppUser.MeritJobs), nameof(AppUser.CraftLevels),
-            nameof(AppUser.AltCharacterName1), nameof(AppUser.Alt1JobLevels), nameof(AppUser.Alt1StrongJobs),
-            nameof(AppUser.Alt1MeritJobs), nameof(AppUser.Alt1CraftLevels),
-            nameof(AppUser.AltCharacterName2), nameof(AppUser.Alt2JobLevels), nameof(AppUser.Alt2StrongJobs),
-            nameof(AppUser.Alt2MeritJobs), nameof(AppUser.Alt2CraftLevels),
-#pragma warning restore CS0618
-        };
+        private static IReadOnlyList<string> AccountNameColumns => CharacterSync.SourceProperties;
 
         // Sync and async saves share this. With async false every query runs synchronously, so the
         // returned task is already complete (SaveChanges waits on it).
         private async Task StampAccountsFromCharactersAsync(bool async, CancellationToken cancellationToken)
         {
-            var characterEntries = ChangeTracker.Entries<Character>().ToList();
             var userEntries = ChangeTracker.Entries<AppUser>()
                 .Where(entry => !string.IsNullOrEmpty(entry.Entity.Id))
                 .GroupBy(entry => entry.Entity.Id, StringComparer.Ordinal)
                 .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+            var characterEntries = ChangeTracker.Entries<Character>().ToList();
+
+            await RemoveDeletedAccountsCharactersWithoutSqlAsync(userEntries, async, cancellationToken);
+            if (AdoptNewAccountsOldColumns(userEntries, characterEntries))
+            {
+                characterEntries = ChangeTracker.Entries<Character>().ToList();
+            }
 
             var accountIds = new HashSet<string>(StringComparer.Ordinal);
             foreach (var entry in characterEntries.Where(entry => entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted))
@@ -56,6 +59,7 @@ namespace LinkshellManagerDiscordApp.Data
             }
             // A deleted account takes its characters with it: nothing to copy.
             accountIds.RemoveWhere(id => userEntries.TryGetValue(id, out var user) && user.State == EntityState.Deleted);
+            RevertCopiesChangedByHand(userEntries, accountIds);
 
             var renamedAccounts = new HashSet<string>(StringComparer.Ordinal);
             if (accountIds.Count > 0)
@@ -162,7 +166,7 @@ namespace LinkshellManagerDiscordApp.Data
                 alt1?.Name, alt1?.JobLevels?.ToArray(), alt1?.StrongJobs?.ToArray(), alt1?.MeritJobs?.ToArray(), alt1?.CraftLevels?.ToArray(),
                 alt2?.Name, alt2?.JobLevels?.ToArray(), alt2?.StrongJobs?.ToArray(), alt2?.MeritJobs?.ToArray(), alt2?.CraftLevels?.ToArray(),
             };
-            for (var i = 0; i < AccountNameColumns.Length; i++)
+            for (var i = 0; i < AccountNameColumns.Count; i++)
             {
                 var property = account.Property(AccountNameColumns[i]);
                 property.CurrentValue = values[i];
@@ -242,6 +246,129 @@ namespace LinkshellManagerDiscordApp.Data
                 {
                     SetDerived(entry, rosterName, main);
                 }
+            }
+        }
+
+        // A new account saved with names in its old columns and no Characters rows of its own in this
+        // save: those names become its rows (see the top of this file). Returns whether any were added.
+        private bool AdoptNewAccountsOldColumns(
+            Dictionary<string, EntityEntry<AppUser>> userEntries, List<EntityEntry<Character>> characterEntries)
+        {
+            var adopted = false;
+            // Account id order, then slot: the order the old SQL copy inserted rows in.
+            foreach (var (id, account) in userEntries.OrderBy(pair => pair.Key, StringComparer.Ordinal))
+            {
+                if (account.State != EntityState.Added
+                    || characterEntries.Any(entry => string.Equals(entry.Entity.AppUserId, id, StringComparison.Ordinal)))
+                {
+                    continue;
+                }
+                var rows = CharacterSync.DesiredRows(account.Entity);
+                if (rows.Count == 0)
+                {
+                    continue;
+                }
+                foreach (var row in rows)
+                {
+                    if (CharacterWriter.IsTooLong(row.Name))
+                    {
+                        LogAccountNames("Characters: new account {AppUserId} has a name in slot {Slot} longer than {MaxLength} characters; it is left out.",
+                            id, row.Slot, CharacterWriter.MaxNameLength);
+                        continue;
+                    }
+                    Characters.Add(new Character
+                    {
+                        AppUserId = id,
+                        Slot = row.Slot,
+                        Name = row.Name,
+                        NormalizedName = row.NormalizedName,
+                        JobLevels = row.JobLevels?.ToArray(),
+                        StrongJobs = row.StrongJobs?.ToArray(),
+                        MeritJobs = row.MeritJobs?.ToArray(),
+                        CraftLevels = row.CraftLevels?.ToArray(),
+                        UpdatedAt = DateTime.UtcNow,
+                    });
+                    adopted = true;
+                }
+                LogAccountNames("Characters: new account {AppUserId} was saved with names in its old columns; they were taken as its characters. Write names with CharacterWriter.", id);
+            }
+            return adopted;
+        }
+
+        // An existing account whose copy columns were changed by hand, in a save that does not change
+        // its Characters rows: the change is undone, so the copy stays exact. Compared by value, so
+        // Identity's UpdateAsync (which marks every column modified) is not a change.
+        private void RevertCopiesChangedByHand(Dictionary<string, EntityEntry<AppUser>> userEntries, HashSet<string> copiedAccounts)
+        {
+            foreach (var (id, account) in userEntries)
+            {
+                if (account.State != EntityState.Modified || copiedAccounts.Contains(id))
+                {
+                    continue;
+                }
+                var reverted = new List<string>();
+                foreach (var column in AccountNameColumns)
+                {
+                    var property = account.Property(column);
+                    if (!SameValue(property.CurrentValue, property.OriginalValue))
+                    {
+                        property.CurrentValue = property.OriginalValue;
+                        reverted.Add(column);
+                    }
+                }
+                if (reverted.Count > 0)
+                {
+                    LogAccountNames("Characters: a save changed {Columns} of account {AppUserId} directly; the change was undone. Write names, jobs and crafts with CharacterWriter.",
+                        string.Join(", ", reverted), id);
+                }
+            }
+        }
+
+        // Postgres deletes an account's Characters rows with it (the foreign key cascades). The
+        // InMemory test database has no foreign keys, so there they are removed here.
+        private async Task RemoveDeletedAccountsCharactersWithoutSqlAsync(
+            Dictionary<string, EntityEntry<AppUser>> userEntries, bool async, CancellationToken cancellationToken)
+        {
+            if (Database.IsRelational())
+            {
+                return;
+            }
+            var deleted = userEntries.Where(pair => pair.Value.State == EntityState.Deleted).Select(pair => pair.Key).ToList();
+            if (deleted.Count == 0)
+            {
+                return;
+            }
+            foreach (var row in await ListAsync(Characters.Where(character => deleted.Contains(character.AppUserId)), async, cancellationToken))
+            {
+                if (Entry(row).State != EntityState.Deleted)
+                {
+                    Characters.Remove(row);
+                }
+            }
+        }
+
+        private static bool SameValue(object? a, object? b) => (a, b) switch
+        {
+            (null, null) => true,
+            (null, _) or (_, null) => false,
+            (int[] x, int[] y) => x.SequenceEqual(y),
+            (string[] x, string[] y) => x.SequenceEqual(y),
+            _ => Equals(a, b),
+        };
+
+        // A warning in the app log. Logging must not fail a save, so a context built without a
+        // logger simply logs nothing.
+        private void LogAccountNames(string message, params object?[] args)
+        {
+            try
+            {
+                Microsoft.EntityFrameworkCore.Infrastructure.AccessorExtensions
+                    .GetService<Microsoft.Extensions.Logging.ILoggerFactory>(this)
+                    .CreateLogger(typeof(CharacterWriter).FullName!)
+                    .Log(Microsoft.Extensions.Logging.LogLevel.Warning, message, args);
+            }
+            catch (InvalidOperationException)
+            {
             }
         }
 

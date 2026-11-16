@@ -1121,215 +1121,6 @@ namespace LinkshellManagerDiscordApp.Data
             }
         }
 
-        // Characters (AddCharacters) follows the accounts. A save that adds an account, or changes
-        // one of its names, jobs or crafts, is followed by CharacterSync.SyncSql for that account,
-        // which copies its three slots from the row AS SAVED. See CharacterSync for why it is SQL run
-        // after the save and not tracked rows inside it. Collected before the save, because the
-        // entry states are reset by it. A name too long to copy is left out and logged here.
-        private List<string> CollectAccountsNeedingCharacterSync()
-        {
-            var ids = new List<string>();
-            foreach (var entry in ChangeTracker.Entries<AppUser>())
-            {
-                var changed = entry.State == EntityState.Added
-                    || (entry.State == EntityState.Modified
-                        && CharacterSync.SourceProperties.Any(name => entry.Property(name).IsModified));
-                // A deleted account's rows go with it: Postgres cascades, the InMemory copy is told.
-                var deletedWithoutSql = entry.State == EntityState.Deleted && !Database.IsRelational();
-                if (!(changed || deletedWithoutSql) || string.IsNullOrEmpty(entry.Entity.Id))
-                {
-                    continue;
-                }
-                ids.Add(entry.Entity.Id);
-                if (deletedWithoutSql)
-                {
-                    continue;
-                }
-                var tooLong = CharacterSync.TooLongNames(entry.Entity).ToList();
-                if (tooLong.Count > 0)
-                {
-                    LogCharacterSync(null,
-                        "Characters: account {AppUserId} has a name longer than {MaxLength} characters ({Names}); it is not copied.",
-                        entry.Entity.Id, Character.MaxNameLength, CharacterSync.Describe(tooLong));
-                }
-            }
-            return ids.Distinct(StringComparer.Ordinal).ToList();
-        }
-
-        private const string CharacterSyncSavepoint = "character_sync";
-
-        // Never fails the save it follows. Without a transaction the save is already committed, and
-        // a failure here is only logged. Inside the caller's transaction it runs in a savepoint, so a
-        // failure is undone on its own and the caller's work carries on. No cancellation token: a
-        // copy stopped half-way inside a transaction would leave that transaction unusable.
-        private async Task SyncCharactersAsync(List<string> accountIds, bool acceptedAllChanges)
-        {
-            if (accountIds.Count == 0)
-            {
-                return;
-            }
-            if (!Database.IsRelational())
-            {
-                await CopyCharactersWithoutSqlAsync(accountIds, acceptedAllChanges);
-                return;
-            }
-            var transaction = Database.CurrentTransaction;
-            try
-            {
-                if (transaction is not null)
-                {
-                    await transaction.CreateSavepointAsync(CharacterSyncSavepoint);
-                }
-                await Database.ExecuteSqlRawAsync(CharacterSync.SyncSql, CharacterSyncParameters(accountIds));
-                if (transaction is not null)
-                {
-                    await transaction.ReleaseSavepointAsync(CharacterSyncSavepoint);
-                }
-            }
-            catch (Exception ex)
-            {
-                if (transaction is not null)
-                {
-                    try
-                    {
-                        await transaction.RollbackToSavepointAsync(CharacterSyncSavepoint);
-                    }
-                    catch (Exception rollbackError)
-                    {
-                        LogCharacterSync(rollbackError, "Characters: could not undo a failed copy.");
-                    }
-                }
-                LogCharacterSync(ex, "Characters: copying {Count} account(s) failed; the save itself went through.", accountIds.Count);
-            }
-        }
-
-        private void SyncCharacters(List<string> accountIds, bool acceptedAllChanges)
-        {
-            if (accountIds.Count == 0)
-            {
-                return;
-            }
-            if (!Database.IsRelational())
-            {
-                CopyCharactersWithoutSql(accountIds, acceptedAllChanges);
-                return;
-            }
-            var transaction = Database.CurrentTransaction;
-            try
-            {
-                transaction?.CreateSavepoint(CharacterSyncSavepoint);
-                Database.ExecuteSqlRaw(CharacterSync.SyncSql, CharacterSyncParameters(accountIds));
-                transaction?.ReleaseSavepoint(CharacterSyncSavepoint);
-            }
-            catch (Exception ex)
-            {
-                if (transaction is not null)
-                {
-                    try
-                    {
-                        transaction.RollbackToSavepoint(CharacterSyncSavepoint);
-                    }
-                    catch (Exception rollbackError)
-                    {
-                        LogCharacterSync(rollbackError, "Characters: could not undo a failed copy.");
-                    }
-                }
-                LogCharacterSync(ex, "Characters: copying {Count} account(s) failed; the save itself went through.", accountIds.Count);
-            }
-        }
-
-        private static object[] CharacterSyncParameters(List<string> accountIds) =>
-            CharacterSync.Parameters(accountIds, DateTime.UtcNow);
-
-        // The InMemory test database has no SQL, and the name lookups read Characters, so there the
-        // copy is made in C# by the same rules (CharacterSync.DesiredRows), as a second save of just
-        // these rows. Only after a save that accepted its changes: otherwise that second save would
-        // also save the caller's pending changes.
-        private void CopyCharactersWithoutSql(List<string> accountIds, bool acceptedAllChanges)
-        {
-            if (acceptedAllChanges && StageCharacterCopyWithoutSql(accountIds))
-            {
-                base.SaveChanges(acceptAllChangesOnSuccess: true);
-            }
-        }
-
-        private async Task CopyCharactersWithoutSqlAsync(List<string> accountIds, bool acceptedAllChanges)
-        {
-            if (acceptedAllChanges && StageCharacterCopyWithoutSql(accountIds))
-            {
-                await base.SaveChangesAsync(acceptAllChangesOnSuccess: true);
-            }
-        }
-
-        // Adds, updates and removes tracked Characters rows to match the accounts as saved. Returns
-        // whether anything changed. An account no longer tracked (deleted) loses its rows.
-        private bool StageCharacterCopyWithoutSql(List<string> accountIds)
-        {
-            var users = ChangeTracker.Entries<AppUser>()
-                .Where(entry => entry.State is EntityState.Unchanged or EntityState.Modified)
-                .Select(entry => entry.Entity)
-                .Where(user => accountIds.Contains(user.Id, StringComparer.Ordinal))
-                .ToDictionary(user => user.Id, StringComparer.Ordinal);
-            var existing = Characters.Where(character => accountIds.Contains(character.AppUserId)).ToList();
-            var changed = false;
-            foreach (var accountId in accountIds)
-            {
-                var desired = users.TryGetValue(accountId, out var user)
-                    ? CharacterSync.DesiredRows(user)
-                    : Array.Empty<CharacterSync.DesiredRow>();
-                var rows = existing.Where(row => row.AppUserId == accountId).ToList();
-                foreach (var row in rows.Where(row => !desired.Any(want =>
-                             want.Slot == row.Slot && want.NormalizedName == row.NormalizedName)).ToList())
-                {
-                    Characters.Remove(row);
-                    rows.Remove(row);
-                    changed = true;
-                }
-                foreach (var want in desired)
-                {
-                    var row = rows.SingleOrDefault(row => row.Slot == want.Slot);
-                    if (row is null)
-                    {
-                        row = new Character { AppUserId = accountId, Slot = want.Slot };
-                        Characters.Add(row);
-                    }
-                    else if (row.Name == want.Name
-                             && Same(row.JobLevels, want.JobLevels) && Same(row.StrongJobs, want.StrongJobs)
-                             && Same(row.MeritJobs, want.MeritJobs) && Same(row.CraftLevels, want.CraftLevels))
-                    {
-                        continue;
-                    }
-                    row.Name = want.Name;
-                    row.NormalizedName = want.NormalizedName;
-                    row.JobLevels = want.JobLevels?.ToArray();
-                    row.StrongJobs = want.StrongJobs?.ToArray();
-                    row.MeritJobs = want.MeritJobs?.ToArray();
-                    row.CraftLevels = want.CraftLevels?.ToArray();
-                    row.UpdatedAt = DateTime.UtcNow;
-                    changed = true;
-                }
-            }
-            return changed;
-
-            static bool Same<T>(T[]? a, T[]? b) => a is null ? b is null : b is not null && a.SequenceEqual(b);
-        }
-
-        // A warning in the app log. Logging must not fail a save either, so a context built without
-        // a logger simply logs nothing.
-        private void LogCharacterSync(Exception? error, string message, params object?[] args)
-        {
-            try
-            {
-                Microsoft.EntityFrameworkCore.Infrastructure.AccessorExtensions
-                    .GetService<Microsoft.Extensions.Logging.ILoggerFactory>(this)
-                    .CreateLogger(typeof(CharacterSync).FullName!)
-                    .Log(Microsoft.Extensions.Logging.LogLevel.Warning, error, message, args);
-            }
-            catch (InvalidOperationException)
-            {
-            }
-        }
-
         // INV-1: every move of AppUserLinkshell.LinkshellDkp is matched, amount for amount, by
         // DkpLedgerEntry rows in the SAME save. That invariant is what lets pool balances be
         // DERIVED from the ledger (DkpPoolBalanceService) instead of cached in a second table.
@@ -1562,7 +1353,6 @@ namespace LinkshellManagerDiscordApp.Data
             var bidItemIds = CollectAddedBidAuctionItemIds();
             var dkpChangedLinkshells = CollectDkpChangedLinkshellIds();
             var liveChanges = CollectLiveChanges();
-            var characterAccounts = CollectAccountsNeedingCharacterSync();
             var result = await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
             if (_bidAnnouncementsHeld is not null)
             {
@@ -1573,7 +1363,6 @@ namespace LinkshellManagerDiscordApp.Data
                 liveChanges.BidAuctionItemIds.Clear();
             }
             CountCommittedSave();
-            await SyncCharactersAsync(characterAccounts, acceptAllChangesOnSuccess);
             EnqueueTodBoardRefreshes(affected);
             EnqueueAuctionChannelWork(createdAuctions, closedAuctions, retimedAuctions);
             EnqueueEventPosts(createdEvents);
@@ -1608,10 +1397,8 @@ namespace LinkshellManagerDiscordApp.Data
             var deletedAuctionCards = CollectDeletedAuctionCards();
             var dkpChangedLinkshells = CollectDkpChangedLinkshellIds();
             var liveChanges = CollectLiveChanges();
-            var characterAccounts = CollectAccountsNeedingCharacterSync();
             var result = base.SaveChanges(acceptAllChangesOnSuccess);
             CountCommittedSave();
-            SyncCharacters(characterAccounts, acceptAllChangesOnSuccess);
             EnqueueTodBoardRefreshes(affected);
             EnqueueAuctionChannelWork(createdAuctions, closedAuctions, retimedAuctions);
             EnqueueEventPosts(createdEvents);
@@ -2582,8 +2369,8 @@ namespace LinkshellManagerDiscordApp.Data
                     .OnDelete(DeleteBehavior.Cascade);
             });
 
-            // An account's characters (AddCharacters): a copy of the account's main and two alts,
-            // kept in step after every save (CharacterSync), that the name lookups read. See Character.
+            // An account's characters (AddCharacters): its main and two alts, the only place names, jobs and
+            // crafts are written since Round 5 (CharacterWriter). Every save copies them onto the account. See Character.
             builder.Entity<Character>(entity =>
             {
                 entity.ToTable("Characters", table =>

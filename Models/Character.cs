@@ -7,9 +7,9 @@ namespace LinkshellManagerDiscordApp.Models;
 /// One of an account's characters: slot 0 is the main, 1 and 2 the two alts (the same numbering as
 /// JobRating.CharacterSlot).
 ///
-/// A copy of AspNetUsers (AddCharacters). The account's name and job columns are still the ones
-/// the app WRITES; this table is a copy of them, one row per non-blank name, kept in step on every
-/// save by ApplicationDbContext (CharacterSync). Since CharactersSwitch the name lookups READ it
+/// Since Round 5 (R5.5) the only place names, jobs and crafts are written: every writer goes through
+/// CharacterWriter, and every save copies the rows onto the account (AppUser.CharacterName from slot
+/// 0, and the old AspNetUsers columns as a mirror). The name lookups read it
 /// (CharacterResolver.LoadMembershipsAsync, LinkshellRosterNames.LoadCandidatesAsync, the addon
 /// /roster alts), so one query covers every character of every account.
 ///
@@ -23,7 +23,8 @@ public class Character
     public const short Alt1Slot = 1;
     public const short Alt2Slot = 2;
 
-    // Longest name the table holds. Longer account names are left out of the copy (and logged).
+    // Longest name the table holds. While the old columns are mirrored, CharacterWriter takes at most
+    // 64 (CharacterWriter.MaxNameLength).
     public const int MaxNameLength = 256;
 
     [Key]
@@ -34,7 +35,7 @@ public class Character
 
     public short Slot { get; set; }
 
-    // Trimmed copy of the account's name for this slot.
+    // The character's name, trimmed.
     [MaxLength(MaxNameLength)]
     public string Name { get; set; } = string.Empty;
 

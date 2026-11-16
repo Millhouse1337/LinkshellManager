@@ -189,7 +189,7 @@ public class LootWinnerAccountTests
         await using var db = NewDb();
         SeedRenamedWinner(db);
         db.SaveChanges();
-        db.Users.Single(u => u.Id == "u1").AltCharacterName1 = "Alty";
+        (await CharacterWriter.LoadAsync(db, "u1", CancellationToken.None)).SetName(Character.Alt1Slot, "Alty");
         db.SaveChanges();
 
         var winner = await LootDkpGuard.ResolveWinnerAsync(db, Ls, typed, CancellationToken.None);

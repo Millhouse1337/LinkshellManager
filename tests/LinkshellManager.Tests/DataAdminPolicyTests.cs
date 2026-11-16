@@ -48,11 +48,20 @@ public class DataAdminPolicyTests
     {
         var catalog = NewCatalog();
 
-        // Character is a copy the app rewrites from the account after every save (AddCharacters).
-        foreach (var ledger in new[] { typeof(DkpLedgerEntry), typeof(JournalEntry), typeof(JournalEntryLine), typeof(AuctionHistory), typeof(AppUserEventHistory), typeof(AppUserEventStatusLedger), typeof(Character) })
+        foreach (var ledger in new[] { typeof(DkpLedgerEntry), typeof(JournalEntry), typeof(JournalEntryLine), typeof(AuctionHistory), typeof(AppUserEventHistory), typeof(AppUserEventStatusLedger) })
         {
             Assert.True(Table(catalog, ledger).IsReadOnly, $"{ledger.Name} should be read-only.");
         }
+
+        // Since Round 5 Characters is where names are written: a name is edited here, but rows come
+        // and go only with the profile. NormalizedName follows Name; the account's copies are shown only.
+        var character = Table(catalog, typeof(Character));
+        Assert.False(character.CanCreate);
+        Assert.False(character.CanDelete);
+        Assert.True(character.CanEdit);
+        Assert.Equal(new[] { nameof(Character.Name) }, character.EditableColumns.Select(column => column.Name));
+        Assert.DoesNotContain(Table(catalog, typeof(AppUser)).EditableColumns,
+            column => column.Name.Contains("CharacterName", StringComparison.Ordinal));
 
         var linkshell = Table(catalog, typeof(Linkshell));
         Assert.False(linkshell.CanDelete);
@@ -78,7 +87,9 @@ public class DataAdminPolicyTests
     {
         var editable = Table(NewCatalog(), typeof(AppUser)).EditableColumns.Select(c => c.Name).ToList();
 
-        Assert.Contains(nameof(AppUser.CharacterName), editable);
+        // Since Round 5 the names are edited on the account's Characters rows; the account shows its
+        // copies of them (CharacterName, the alts) read-only.
+        Assert.DoesNotContain(nameof(AppUser.CharacterName), editable);
         Assert.Contains(nameof(AppUser.IsPlaceholder), editable);
         Assert.DoesNotContain(nameof(AppUser.IsSuperAdmin), editable);
         Assert.DoesNotContain(nameof(AppUser.Email), editable);

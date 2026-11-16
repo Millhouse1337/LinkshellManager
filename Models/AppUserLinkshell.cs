@@ -34,8 +34,10 @@ public class AppUserLinkshell
     [ForeignKey(nameof(LinkshellId))]
     public Linkshell? Linkshell { get; set; }
 
-    // The roster name. Round 5: still written (a copy of the account's main name), never read: the
-    // roster shows the account's CharacterName and names resolve through the account's Characters.
+    // The roster name. Round 5: never read (the roster shows the account's CharacterName and names
+    // resolve through the account's Characters), and written only by the save, as a copy of the
+    // account's main (ApplicationDbContext.StampRosterNamesAsync), so the build before the name switch
+    // still sees the right names if it is swapped back in.
     [Obsolete("Round 5: the roster name is not read. Use AppUser.CharacterName (the account main) instead.")]
     public string? CharacterName { get; set; }
 
@@ -112,6 +114,5 @@ public class AppUserLinkshell
     public DateTime? DateJoined { get; set; }
 
     // (The main character's jobs used to have a copy here too. They live on the account:
-    // AppUser.JobLevels / StrongJobs / MeritJobs, see MainCharacterJobs. Round4Contract dropped the
-    // old copies.)
+    // the account's main Characters row since Round 5. Round4Contract dropped the old copies.)
 }

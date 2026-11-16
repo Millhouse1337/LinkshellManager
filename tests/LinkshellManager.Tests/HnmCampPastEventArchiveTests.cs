@@ -489,8 +489,7 @@ public class HnmCampPastEventArchiveTests
     {
         using var db = await SeededAsync(
             scans: new Dictionary<string, string> { [AlphaId] = "Alpha" });
-        var alpha = await db.Users.FirstAsync(u => u.Id == AlphaId);
-        alpha.AltCharacterName1 = "Alphalt";
+        (await CharacterWriter.LoadAsync(db, AlphaId, CancellationToken.None)).SetName(Character.Alt1Slot, "Alphalt");
         var windowEvent = await EndCampAsync(db);
 
         var snapshot = await db.AttendanceSnapshots.FirstAsync();

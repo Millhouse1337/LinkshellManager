@@ -88,7 +88,8 @@ public class AccountCharactersTests
         var notLoaded = await db.AppUserLinkshells.AsNoTracking().SingleAsync(link => link.Id == 1);
 
         Assert.Equal("Loaded", await AccountCharacters.MainNameAsync(db, loaded, CancellationToken.None));
-        Assert.Equal(" Main ", await AccountCharacters.MainNameAsync(db, notLoaded, CancellationToken.None));
+        // The account's main name is a copy of its (trimmed) main character since R5.5.
+        Assert.Equal("Main", await AccountCharacters.MainNameAsync(db, notLoaded, CancellationToken.None));
         Assert.Null(await AccountCharacters.MainNameAsync(db, new AppUserLinkshell(), CancellationToken.None));
         Assert.Null(await AccountCharacters.MainNameAsync(db, null, CancellationToken.None));
     }

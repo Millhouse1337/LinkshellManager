@@ -46,7 +46,7 @@ public class UnknownMigrationHistoryRowTests
                 // What Program.cs runs at start-up, in the same order. The synchronous Migrate is
                 // the one Program.cs calls; it would throw here if EF refused the unknown row.
                 db.Database.Migrate();
-                await CharacterSync.ResyncAllAsync(db, CancellationToken.None);
+                Assert.True((await AccountNameMirrorCheck.CountAsync(db, CancellationToken.None)).AllMatch);
 
                 Assert.Empty(db.Database.GetPendingMigrations());
                 var applied = db.Database.GetAppliedMigrations().ToList();

@@ -15,9 +15,8 @@ namespace LinkshellManagerDiscordApp.Services;
 // name on a membership (AppUserLinkshell.CharacterName) is no longer read at all: it is only ever a
 // copy of the account's main.
 //
-// The old AspNetUsers columns are still where names are WRITTEN in this build (CharacterSync copies
-// them into Characters on every save). Rows are read AsNoTracking, so a read after a save sees
-// what that save's copy wrote.
+// Characters is also where names are WRITTEN, through CharacterWriter (R5.5); the account's
+// CharacterName and old columns are copies the save keeps. Rows are read AsNoTracking.
 public static class AccountCharacters
 {
     // Every Characters row of every account that has a membership in the linkshell, by account.

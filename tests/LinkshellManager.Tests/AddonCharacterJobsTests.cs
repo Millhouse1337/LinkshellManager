@@ -261,7 +261,7 @@ public class AddonCharacterJobsTests
     public async Task OwnAlt_OfAnOwnerNotOnTheTokensLinkshell_IsRefused()
     {
         await using var db = Seeded();
-        db.Users.Single(u => u.Id == "dave").AltCharacterName1 = "Davealt";
+        (await CharacterWriter.LoadAsync(db, "dave", CancellationToken.None)).SetName(Character.Alt1Slot, "Davealt");
         db.SaveChanges();
         var before = AllJobs(db);
 
@@ -287,7 +287,7 @@ public class AddonCharacterJobsTests
     {
         await using var db = Seeded();
         // The roster row has no jobs of its own: the account's value is the answer.
-        db.Users.Single(u => u.Id == "bob").JobLevels = new[] { 0, 70 };
+        (await CharacterWriter.LoadAsync(db, "bob", CancellationToken.None)).SetJobs(Character.MainSlot, jobLevels: new[] { 0, 70 });
         db.SaveChanges();
 
         var ok = Assert.IsType<OkObjectResult>(await NewAddonController(db, "bob").GetRosterAsync(CancellationToken.None));

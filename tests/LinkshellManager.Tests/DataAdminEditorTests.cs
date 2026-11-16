@@ -118,7 +118,8 @@ public class DataAdminEditorTests
         Assert.True(result.Succeeded, string.Join("; ", result.Errors.Select(e => e.Message)));
         var user = await db.Users.AsNoTracking().SingleAsync(u => u.Id == "u1");
         Assert.False(user.IsSuperAdmin);
-        Assert.Equal("Renamed", user.CharacterName);
+        // CharacterName is a copy of the main character since Round 5: not editable here either.
+        Assert.Equal("Millhouse", user.CharacterName);
         Assert.Null(user.Email);
         Assert.Null(user.PasswordHash);
     }

@@ -167,8 +167,10 @@ public class CharacterNameLookupParityTests : IAsyncLifetime
         Assert.Equal(expected, newRows.OrderBy(row => row, StringComparer.Ordinal));
         Assert.Contains(newRows, row => row.Contains("\"jobLevels\":[0,40]", StringComparison.Ordinal));
         Assert.Contains(newRows, row => row.Contains("\"jobLevels\":[0,75]", StringComparison.Ordinal));
+        // Since R5.5 the account's main name is a copy of its trimmed main character, so the names come
+        // back trimmed (production has no name with spaces around it, pre-check A4).
         Assert.Equal(
-            Roster.Where(r => r.Id is not null && !string.IsNullOrWhiteSpace(r.Main)).Select(r => r.Main).OrderBy(n => n, StringComparer.Ordinal),
+            Roster.Where(r => r.Id is not null && !string.IsNullOrWhiteSpace(r.Main)).Select(r => r.Main!.Trim()).OrderBy(n => n, StringComparer.Ordinal),
             json.RootElement.GetProperty("characterNames").EnumerateArray().Select(e => e.GetString()).OrderBy(n => n, StringComparer.Ordinal));
     }
 

@@ -668,20 +668,30 @@ if (!app.Environment.IsDevelopment())
                 .LogWarning(ex, "SpawnKey refill: could not run; start-up continues.");
         }
 
-        // The name lookups read Characters, a copy of the accounts' names kept in step on every
-        // save. Copy every account again now, so a copy that failed (or one an older build skipped
-        // while it was rolled back to) never outlives a restart. Never stops start-up.
+        // Characters is the only written source of names (Round 5, R5.5); every save copies it onto
+        // the account columns and roster names the previous build still reads. Read-only: count what
+        // does not match, so a rollback is never made on a database where it would lose a change.
+        // Never stops start-up.
         try
         {
-            var checkedAccounts = await CharacterSync.ResyncAllAsync(
+            var mirror = await AccountNameMirrorCheck.CountAsync(
                 services.GetRequiredService<ApplicationDbContext>(), CancellationToken.None);
-            services.GetRequiredService<ILogger<Program>>()
-                .LogInformation("Characters: checked the copy of {Count} account(s).", checkedAccounts);
+            var log = services.GetRequiredService<ILogger<Program>>();
+            if (mirror.AllMatch)
+            {
+                log.LogInformation("Characters: the account columns and roster names match Characters.");
+            }
+            else
+            {
+                log.LogWarning(
+                    "Characters: {Accounts} account(s) whose old name/job columns differ from Characters, {Mains} whose CharacterName is not their main's name, {RosterNames} roster name(s) that differ from the account's main. Do not roll back to the build before the name switch until this is 0.",
+                    mirror.Accounts, mirror.Mains, mirror.RosterNames);
+            }
         }
         catch (Exception ex)
         {
             services.GetRequiredService<ILogger<Program>>()
-                .LogWarning(ex, "Characters: the start-up copy failed; each account is copied again on its next save.");
+                .LogWarning(ex, "Characters: the start-up mirror check could not run; start-up continues.");
         }
     }
 }

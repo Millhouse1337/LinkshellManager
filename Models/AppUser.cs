@@ -6,14 +6,17 @@ namespace LinkshellManagerDiscordApp.Models;
 
 public class AppUser : IdentityUser
 {
-    // Round 5 (names): the alt names and every job and craft column below are still WRITTEN here
-    // (and copied into Characters on save, CharacterSync), but nothing reads them any more: reads go
-    // to Characters (AccountCharacters). [Obsolete] plus CS0618-as-error in the app project makes
-    // the compiler refuse a new reader; the few writers left say so with #pragma.
+    // Round 5 (names): the alt names and every job and craft column below are a MIRROR of the
+    // account's Characters rows, written only by the save (ApplicationDbContext
+    // .StampAccountsFromCharactersAsync) so the build before the name switch can still be swapped back
+    // in. Nothing reads them: reads go to Characters (AccountCharacters), and every write goes through
+    // CharacterWriter. [Obsolete] plus CS0618-as-error in the app project makes the compiler refuse a
+    // new reader or writer; the save hook says so with #pragma.
     internal const string ReadCharactersInstead =
         "Round 5: read the account's Characters rows (AccountCharacters) instead.";
 
-    // The main character's name. Still read and written: it is the account's display name.
+    // The main character's name: the account's display name. Read everywhere, but never written by
+    // hand since R5.5: every save sets it to the main's (slot 0) Characters name, or null.
     public string? CharacterName { get; set; }
 
     // Every character of the account (slot 0 main, 1 and 2 the alts): the read side of the names.
@@ -22,9 +25,9 @@ public class AppUser : IdentityUser
     // The main character's jobs, on the account: one character, one set of jobs, whichever
     // linkshell is looking. Same formats as the alts' columns below (levels and strong flags
     // FFXI-job-id-indexed, merit notes catalog-aligned; see ProfileJobLevels). They used to live
-    // only on each membership; the migration AccountJobsAndKeyItemAccounts copied them here, every
-    // write goes through MainCharacterJobs.Write (reads use Characters since Round 5), and
-    // Round4Contract dropped the old membership copies. Null when never set.
+    // only on each membership; the migration AccountJobsAndKeyItemAccounts copied them here, and
+    // Round4Contract dropped the old membership copies. Since Round 5 a mirror of the main's
+    // Characters row (see the top of this class). Null when never set.
     [Column(TypeName = "jsonb")]
     [Obsolete(ReadCharactersInstead)]
     public int[]? JobLevels { get; set; }

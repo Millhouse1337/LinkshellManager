@@ -7,7 +7,7 @@ namespace LinkshellManager.Tests;
 // Since Round 5 the name lookups read alts from Characters rows (AccountCharacters), not from the
 // account columns. Tests that build memberships in memory (no database) still describe a member
 // with the account columns; this turns those into the Characters rows the database would hold,
-// by the same rules the save hook copies them with (CharacterSync.DesiredRows).
+// by the rules a new account's old columns become its characters with (CharacterSync.DesiredRows).
 internal static class TestCharacters
 {
     public static Dictionary<string, Character[]> Of(IEnumerable<AppUserLinkshell> memberships) =>

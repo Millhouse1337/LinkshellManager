@@ -97,10 +97,28 @@ public sealed class DataAdminPolicy
             [typeof(AppUserEventHistory)] = readOnly,
             [typeof(AppUserEventStatusLedger)] = readOnly,
 
-            // ---- copies the app keeps in step itself -----------------------------------------------
-            // A copy of each account's names and jobs (AddCharacters), rewritten from the account after
-            // every save (CharacterSync). Edit the account instead; an edit here would be overwritten.
-            [typeof(Character)] = readOnly,
+            // ---- characters --------------------------------------------------------------------------
+            // An account's characters (slot 0 the main, 1 and 2 the alts): since Round 5 the only place
+            // names, jobs and crafts are written. A name is edited here; every save copies it onto the
+            // account (its CharacterName and the old columns) and the roster names. NormalizedName
+            // follows Name. Rows come and go with the profile (CharacterWriter), never here. The job
+            // and craft lists are jsonb arrays, which Data Admin never edits (IsProtected).
+            [typeof(Character)] = new()
+            {
+                Flags = DataAdminPolicyFlags.NoCreate | DataAdminPolicyFlags.NoDelete,
+                EditableAllowList = new[] { nameof(Character.Name) },
+                ReadOnlyColumns = Names(nameof(Character.NormalizedName)),
+                BeforeSave = (_, entity, _) =>
+                {
+                    if (entity is Character row)
+                    {
+                        row.Name = row.Name?.Trim() ?? string.Empty;
+                        row.NormalizedName = CharacterWriter.Normalize(row.Name);
+                        row.UpdatedAt = DateTime.UtcNow;
+                    }
+                    return Task.CompletedTask;
+                },
+            },
 
             // ---- tenant roots and identity ---------------------------------------------------------
             [typeof(EventHistory)] = new()
@@ -119,11 +137,10 @@ public sealed class DataAdminPolicy
                 Flags = DataAdminPolicyFlags.NoCreate | DataAdminPolicyFlags.NoDelete,
                 LabelColumns = new[] { nameof(AppUser.CharacterName), nameof(AppUser.UserName), nameof(AppUser.Email) },
                 // IsSuperAdmin is seeded from configuration only (Program.cs); Email/UserName drive login.
+                // Names, jobs and crafts are edited on the account's Characters rows (Round 5): the
+                // account's own copies of them (CharacterName, the alts) are shown, never edited.
                 EditableAllowList = new[]
                 {
-#pragma warning disable CS0618 // Round 5: Data Admin still edits the alt columns, the written source (R5.5 makes them read-only).
-                    nameof(AppUser.CharacterName), nameof(AppUser.AltCharacterName1), nameof(AppUser.AltCharacterName2),
-#pragma warning restore CS0618
                     nameof(AppUser.TimeZone), nameof(AppUser.PrimaryLinkshellId),
                     nameof(AppUser.IsPlaceholder),
                 },
@@ -136,10 +153,14 @@ public sealed class DataAdminPolicy
                 // them in step with the ledger (INV-1 in ApplicationDbContext); shown here, never edited.
                 // The role is edited by its id (LinkshellRoleId, the source); every save copies that role's
                 // name into Rank (ApplicationDbContext.StampMembershipRoles), so Rank is shown, never edited.
-                // The two-column foreign key refuses another linkshell's role.
+                // The two-column foreign key refuses another linkshell's role. The roster name is a copy
+                // of the account's main that every save stamps (Round 5), so it is shown, never edited.
                 ReadOnlyColumns = Names(
                     nameof(AppUserLinkshell.LinkshellDkp), nameof(AppUserLinkshell.SeededDkpEarned), nameof(AppUserLinkshell.SeededDkpSpent),
                     nameof(AppUserLinkshell.DkpSeedLedgerId), nameof(AppUserLinkshell.DkpPoolLedgerFromId),
+#pragma warning disable CS0618 // Round 5: the roster name is shown read-only, never edited.
+                    nameof(AppUserLinkshell.CharacterName),
+#pragma warning restore CS0618
                     nameof(AppUserLinkshell.Rank)),
             },
             [typeof(DiscordActivityUser)] = new()

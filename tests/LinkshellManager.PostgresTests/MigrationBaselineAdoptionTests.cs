@@ -79,7 +79,7 @@ public class MigrationBaselineAdoptionTests
                 // What Program.cs runs at start-up, in the same order.
                 Assert.Equal(MigrationBaseline.Outcome.Adopted, await MigrationBaseline.AdoptAsync(db));
                 db.Database.Migrate();
-                await CharacterSync.ResyncAllAsync(db, CancellationToken.None);
+                Assert.True((await AccountNameMirrorCheck.CountAsync(db, CancellationToken.None)).AllMatch);
 
                 Assert.Empty(db.Database.GetPendingMigrations());
             }
