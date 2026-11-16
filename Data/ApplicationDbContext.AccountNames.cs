@@ -186,6 +186,7 @@ namespace LinkshellManagerDiscordApp.Data
 
         // A new account saved with names in its old columns and no Characters rows of its own in this
         // save: those names become its rows (see the top of this file). Returns whether any were added.
+        // ROUND5-DROP: reads the old alt, job and craft columns (R5.7: the main name part at most).
         private bool AdoptNewAccountsOldColumns(
             Dictionary<string, EntityEntry<AppUser>> userEntries, List<EntityEntry<Character>> characterEntries)
         {

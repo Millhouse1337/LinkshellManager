@@ -27,6 +27,7 @@ public static class CharacterSync
     // The account's columns that are copies of its characters: the main's name first, then each
     // slot's jobs and crafts. The save hook stamps the first (CharacterName) from Characters and
     // keeps the other 14 unwritten (R5.6).
+    // ROUND5-DROP: names the 14 old columns; R5.7 deletes it (or keeps CharacterName only).
     public static readonly IReadOnlyList<string> SourceProperties = new[]
     {
         nameof(AppUser.CharacterName), nameof(AppUser.JobLevels), nameof(AppUser.StrongJobs),
@@ -50,6 +51,7 @@ public static class CharacterSync
     // The rows an account's old columns describe: .NET Trim, not blank, at most 256 characters
     // (counted as Postgres counts them), lower-cased with ToLowerInvariant, and a repeat of an
     // earlier slot's name left out.
+    // ROUND5-DROP: reads the old alt, job and craft columns (R5.7: the main part at most).
     public static IReadOnlyList<DesiredRow> DesiredRows(AppUser user)
     {
         var slots = new (string? Name, int[]? Jobs, int[]? Strong, string[]? Merits, int[]? Crafts)[]
