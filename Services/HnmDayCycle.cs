@@ -41,7 +41,12 @@ public static class HnmDayCycle
             return requestedDay;
         }
 
-        var names = HnmConfig.MonsterMatchNamesLower(monsterName);
+        // The camp's spawn key, so a "Nidhogg" ToD finds a "Fafnir/Nidhogg" or a "Fafnir" camp.
+        var spawnKey = HnmConfig.SpawnKey(monsterName);
+        if (spawnKey is null)
+        {
+            return requestedDay;
+        }
         var campDay = await db.Events
             .Where(e => e.LinkshellId == linkshellId
                 && e.EndTime == null
@@ -49,8 +54,7 @@ public static class HnmDayCycle
                 && e.HnmDefeatedAt == null
                 && e.DayNumber != null
                 && e.DayNumber > 0
-                && e.AssignedMonsterName != null
-                && names.Contains(e.AssignedMonsterName.ToLower()))
+                && e.SpawnKey == spawnKey)
             .OrderByDescending(e => e.CommencementStartTime)
             .Select(e => e.DayNumber)
             .FirstOrDefaultAsync(cancellationToken);

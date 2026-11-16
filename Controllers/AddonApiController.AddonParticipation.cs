@@ -809,9 +809,14 @@ public sealed partial class AddonApiController
         //
         // A ToD is an observation ("Fafnir died at 21:04"); the loot belongs to the camp that
         // killed it. Filing it on the ToD is what put every in-game drop in the Loot History as
-        // source "ToD" with no event behind it. Merge-pair tolerant, so a Fafnir kill finds a
-        // "Fafnir/Nidhogg" camp.
-        var monsterMatches = HnmConfig.MonsterMatchNamesLower(tod.MonsterName);
+        // source "ToD" with no event behind it. Matched on the camp's spawn key, so a Nidhogg kill
+        // finds a "Fafnir/Nidhogg" camp and a "Fafnir" camp alike.
+        var spawnKey = HnmConfig.SpawnKey(tod.MonsterName);
+        // The EventName second chances below still go by NAME: an event's name is free text with
+        // no key of its own, so it is compared with every spelling of the spawn, lower-cased.
+        var monsterMatches = HnmConfig.MonsterMatchNames(tod.MonsterName)
+            .Select(name => name.ToLowerInvariant())
+            .ToList();
 
         // Matched on AssignedMonsterName FIRST, then on EventName.
         //
@@ -834,9 +839,9 @@ public sealed partial class AddonApiController
                 events = events.Where(EventRunState.Running);
             }
 
-            var id = await events
-                .Where(evt => evt.AssignedMonsterName != null
-                              && monsterMatches.Contains(evt.AssignedMonsterName.ToLower()))
+            // A ToD with no name has no key; it must not match every camp that has none either.
+            var id = spawnKey is null ? null : await events
+                .Where(evt => evt.SpawnKey == spawnKey)
                 .OrderByDescending(evt => evt.CommencementStartTime ?? evt.StartTime)
                 .Select(evt => (int?)evt.Id)
                 .FirstOrDefaultAsync(cancellationToken);

@@ -199,8 +199,10 @@ public static class HnmRecurringBoardService
             return;
         }
 
-        var names = HnmConfig.MonsterMatchNamesLower(monster);
-        if (names.Count == 0)
+        // Parked boards and ToDs are both matched on the spawn key, so a "Nidhogg" ToD finds a
+        // "Fafnir/Nidhogg" or a "Fafnir" board.
+        var spawnKey = HnmConfig.SpawnKey(monster);
+        if (spawnKey is null)
         {
             return;
         }
@@ -208,8 +210,7 @@ public static class HnmRecurringBoardService
         var parked = await db.Events
             .Where(e => e.LinkshellId == linkshellId
                 && e.HnmDefeatedAt != null
-                && e.AssignedMonsterName != null
-                && names.Contains(e.AssignedMonsterName.ToLower()))
+                && e.SpawnKey == spawnKey)
             .ToListAsync(cancellationToken);
         if (parked.Count == 0)
         {
@@ -218,8 +219,6 @@ public static class HnmRecurringBoardService
 
         // Derive from the monster's NEWEST ToD, not necessarily the row that was just touched —
         // that's the one the poller acts on, so it's the only honest source for the display.
-        // (Events are still matched by name above; ToDs by their spawn key.)
-        var spawnKey = HnmConfig.SpawnKey(monster);
         var latest = await db.Tods
             .Where(tod => tod.LinkshellId == linkshellId
                 && tod.SpawnKey == spawnKey
@@ -308,13 +307,13 @@ public static class HnmRecurringBoardService
             return;
         }
 
-        var names = HnmConfig.MonsterMatchNamesLower(monster);
+        // The key FindAsync found the standing board by (never null: the name is not blank).
+        var spawnKey = HnmConfig.SpawnKey(monster);
         var anotherBoardUp = await db.Events.AnyAsync(e =>
                 e.LinkshellId == removed.LinkshellId
                 && e.Id != removed.Id
                 && e.EndTime == null
-                && e.AssignedMonsterName != null
-                && names.Contains(e.AssignedMonsterName.ToLower()),
+                && e.SpawnKey == spawnKey,
             cancellationToken);
         if (anotherBoardUp)
         {

@@ -106,23 +106,25 @@ public sealed class HnmRecurringBoardBackgroundService : BackgroundService
     {
         var monster = board.MonsterName.Trim();
         // A board may be keyed on a combined "Base/Stronger" name, and the ToD logged from
-        // that board records the same combined name — so match on every spelling of the
-        // spawn (the combined label AND either half), not just the segments.
-        // Events are still matched on that list of names; ToDs on the board's spawn key.
-        var names = HnmConfig.MonsterMatchNamesLower(monster);
+        // that board records the same combined name — so ToDs and camps are both matched on the
+        // board's SPAWN KEY (HnmConfig.SpawnKey): the combined label and either half give one key.
         var spawnKey = HnmConfig.SpawnKey(monster);
+        if (spawnKey is null)
+        {
+            return; // a board with no monster has no ToDs and no camps to match
+        }
 
         // Latest ToD for this monster that has a predicted pop time. "Latest" is the latest POP, not
         // the highest row id: an edited ToD keeps its old id, so going by id let an older kill logged
         // after it hide the real next pop, and the board never came back (OnlyFrens Turtle, 2026-11-05).
-        var tod = spawnKey is null ? null : await db.Tods
+        var tod = await db.Tods
             .Where(t => t.LinkshellId == board.LinkshellId
                 && t.SpawnKey == spawnKey
                 && t.RepopTime != null)
             .OrderByDescending(t => t.RepopTime)
             .ThenByDescending(t => t.Id)
             .FirstOrDefaultAsync(cancellationToken);
-        if (await WaitOrReviveBoardMovedLaterAsync(db, board, names, tod?.RepopTime, nowUtc, cancellationToken))
+        if (await WaitOrReviveBoardMovedLaterAsync(db, board, spawnKey, tod?.RepopTime, nowUtc, cancellationToken))
         {
             return;
         }
@@ -175,8 +177,7 @@ public sealed class HnmRecurringBoardBackgroundService : BackgroundService
                     && e.StartTime >= windowStart
                     && e.StartTime <= windowEnd
                     && (e.EventName == eventName
-                        || (e.AssignedMonsterName != null
-                            && names.Contains(e.AssignedMonsterName.ToLower()))))),
+                        || e.SpawnKey == spawnKey))),
             cancellationToken);
 
         // A camp for this spawn is LIVE: that board IS this pop's board -- an officer is standing
@@ -193,8 +194,7 @@ public sealed class HnmRecurringBoardBackgroundService : BackgroundService
                 .Where(e => e.LinkshellId == board.LinkshellId
                     && e.EndTime == null
                     && e.CommencementStartTime != null
-                    && e.AssignedMonsterName != null
-                    && names.Contains(e.AssignedMonsterName.ToLower()))
+                    && e.SpawnKey == spawnKey)
                 .Select(e => (int?)e.Id)
                 .FirstOrDefaultAsync(cancellationToken);
             if (liveCamp is { } liveCampId)
@@ -218,8 +218,7 @@ public sealed class HnmRecurringBoardBackgroundService : BackgroundService
             .Where(e => e.LinkshellId == board.LinkshellId
                 && e.EndTime == null
                 && e.CommencementStartTime == null
-                && e.AssignedMonsterName != null
-                && names.Contains(e.AssignedMonsterName.ToLower())
+                && e.SpawnKey == spawnKey
                 // An EARLIER pop's leftover only. A board scheduled for a pop AFTER this one is
                 // somebody's plan for that pop, not a stale row, and dragging it backwards onto
                 // this repop would throw away what they set it up for.
@@ -304,7 +303,7 @@ public sealed class HnmRecurringBoardBackgroundService : BackgroundService
     // (or none at all) would never open it. True when such a board exists, which leaves the rest of
     // this tick alone.
     private async Task<bool> WaitOrReviveBoardMovedLaterAsync(
-        ApplicationDbContext db, HnmRecurringBoard board, List<string> names,
+        ApplicationDbContext db, HnmRecurringBoard board, string spawnKey,
         DateTime? newestRepopUtc, DateTime nowUtc, CancellationToken cancellationToken)
     {
         var parked = await db.Events
@@ -312,8 +311,7 @@ public sealed class HnmRecurringBoardBackgroundService : BackgroundService
                 && e.HnmDefeatedAt != null
                 && e.HnmRepostAt != null
                 && e.StartTime > nowUtc
-                && e.AssignedMonsterName != null
-                && names.Contains(e.AssignedMonsterName.ToLower()))
+                && e.SpawnKey == spawnKey)
             .ToListAsync(cancellationToken);
         var moved = parked.FirstOrDefault(e => newestRepopUtc is not { } repop || e.StartTime > repop);
         if (moved is null)
