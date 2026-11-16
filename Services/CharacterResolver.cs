@@ -24,7 +24,8 @@ namespace LinkshellManagerDiscordApp.Services;
 //   - a membership with no account is never an answer: there is nobody to charge or credit.
 //
 // Until Round 5 the membership's own roster name was a fourth slot, checked first. It was always a
-// copy of the account's main, so dropping it changes no answer (CharacterNameLookupParityTests).
+// copy of the account's main, so dropping it changed no answer (CharacterNameLookupParityTests
+// proved it on a messy roster until Round5Contract dropped the roster name; see git history).
 //
 // RosterNameSet (LinkshellRosterNames.cs) is the yes/no version of the same three names.
 public enum CharacterNameSlot

@@ -9,9 +9,6 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
-    <!-- Round 5 (names): the old account name/job columns and the roster name are [Obsolete] in the
-         app. Tests still seed them (they are the written source until R5.5), so no warning here. -->
-    <NoWarn>$(NoWarn);CS0618</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

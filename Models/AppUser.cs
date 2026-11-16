@@ -1,119 +1,19 @@
-using System.ComponentModel.DataAnnotations;
-using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.AspNetCore.Identity;
 
 namespace LinkshellManagerDiscordApp.Models;
 
 public class AppUser : IdentityUser
 {
-    // Round 5 (names): the alt names and every job and craft column below are OLD copies of the
-    // account's Characters rows. Nothing reads them (reads go to Characters, AccountCharacters) and,
-    // since R5.6, nothing writes them (every write goes through CharacterWriter, and the save hook,
-    // ApplicationDbContext.StampAccountsFromCharactersAsync, keeps them unwritten). They hold what
-    // the R5.5 build last copied there. Each is still mapped, with a drop marker, so the model
-    // matches the database until R5.7 drops them; see docs/round5-drop-manifest.md. [Obsolete] plus
-    // CS0618-as-error in the app project makes the compiler refuse a new reader or writer.
-    internal const string ReadCharactersInstead =
-        "Round 5: read the account's Characters rows (AccountCharacters) instead.";
-
     // The main character's name: the account's display name. Read everywhere, but never written by
-    // hand since R5.5: every save sets it to the main's (slot 0) Characters name, or null.
+    // hand since Round 5: every save sets it to the main's (slot 0) Characters name, or null
+    // (ApplicationDbContext.StampAccountsFromCharactersAsync).
     public string? CharacterName { get; set; }
 
-    // Every character of the account (slot 0 main, 1 and 2 the alts): the read side of the names.
+    // Every character of the account (slot 0 main, 1 and 2 the alts) with its jobs and crafts: the
+    // only place names, jobs and crafts live since Round 5 (written by CharacterWriter, read through
+    // AccountCharacters). The account's old alt, job and craft columns were dropped by
+    // Round5Contract (R5.7).
     public ICollection<Character> Characters { get; set; } = new List<Character>();
-
-    // The main character's jobs, on the account: one character, one set of jobs, whichever
-    // linkshell is looking. Same formats as the alts' columns below (levels and strong flags
-    // FFXI-job-id-indexed, merit notes catalog-aligned; see ProfileJobLevels). They used to live
-    // only on each membership; the migration AccountJobsAndKeyItemAccounts copied them here, and
-    // Round4Contract dropped the old membership copies. Since Round 5 an old copy of the main's
-    // Characters row (see the top of this class). Null when never set.
-    // ROUND5-DROP: old copy of a Characters row; unread since R5.4, unwritten since R5.6.
-    [Column(TypeName = "jsonb")]
-    [Obsolete(ReadCharactersInstead)]
-    public int[]? JobLevels { get; set; }
-
-    // ROUND5-DROP: old copy of a Characters row; unread since R5.4, unwritten since R5.6.
-    [Column(TypeName = "jsonb")]
-    [Obsolete(ReadCharactersInstead)]
-    public int[]? StrongJobs { get; set; }
-
-    // ROUND5-DROP: old copy of a Characters row; unread since R5.4, unwritten since R5.6.
-    [Column(TypeName = "jsonb")]
-    [Obsolete(ReadCharactersInstead)]
-    public string[]? MeritJobs { get; set; }
-
-    // ROUND5-DROP: old copy of a Characters row; unread since R5.4, unwritten since R5.6.
-    [MaxLength(64)]
-    [Obsolete(ReadCharactersInstead)]
-    public string? AltCharacterName1 { get; set; }
-
-    // ROUND5-DROP: old copy of a Characters row; unread since R5.4, unwritten since R5.6.
-    [MaxLength(64)]
-    [Obsolete(ReadCharactersInstead)]
-    public string? AltCharacterName2 { get; set; }
-
-    // Per-job levels for the two alt characters, in the same FFXI-job-id-indexed
-    // format as JobLevels above (see ProfileJobLevels). Alts have no
-    // linkshell membership of their own, so their job lists live here on the
-    // account. Null when the alt has no name / no levels set.
-    // ROUND5-DROP: old copy of a Characters row; unread since R5.4, unwritten since R5.6.
-    [Column(TypeName = "jsonb")]
-    [Obsolete(ReadCharactersInstead)]
-    public int[]? Alt1JobLevels { get; set; }
-
-    // ROUND5-DROP: old copy of a Characters row; unread since R5.4, unwritten since R5.6.
-    [Column(TypeName = "jsonb")]
-    [Obsolete(ReadCharactersInstead)]
-    public int[]? Alt2JobLevels { get; set; }
-
-    // Per-job "strong" flags for the two alt characters, parallel to Alt1/Alt2
-    // JobLevels and in the same FFXI-job-id-indexed format (see ProfileJobLevels).
-    // A non-zero entry marks the job as well-geared/merited. Null when the alt has
-    // no name / no flags set.
-    // ROUND5-DROP: old copy of a Characters row; unread since R5.4, unwritten since R5.6.
-    [Column(TypeName = "jsonb")]
-    [Obsolete(ReadCharactersInstead)]
-    public int[]? Alt1StrongJobs { get; set; }
-
-    // ROUND5-DROP: old copy of a Characters row; unread since R5.4, unwritten since R5.6.
-    [Column(TypeName = "jsonb")]
-    [Obsolete(ReadCharactersInstead)]
-    public int[]? Alt2StrongJobs { get; set; }
-
-    // Per-job free-text merit notes for the two alt characters, catalog-aligned
-    // (index 0 = WAR … 14 = SMN, 15 = BLU … 17 = PUP), parallel to the alts' Strong
-    // flags. Null when the
-    // alt has no name / no merits set.
-    // ROUND5-DROP: old copy of a Characters row; unread since R5.4, unwritten since R5.6.
-    [Column(TypeName = "jsonb")]
-    [Obsolete(ReadCharactersInstead)]
-    public string[]? Alt1MeritJobs { get; set; }
-
-    // ROUND5-DROP: old copy of a Characters row; unread since R5.4, unwritten since R5.6.
-    [Column(TypeName = "jsonb")]
-    [Obsolete(ReadCharactersInstead)]
-    public string[]? Alt2MeritJobs { get; set; }
-
-    // Per-craft levels for the main character and the two alts, in CraftCatalog
-    // order (Alchemy, Bonecraft, …, Fishing). Crafting is account-level (it doesn't
-    // vary by linkshell), so — unlike per-membership job levels — all three live
-    // here on the account. Null when unset / the alt has no name.
-    // ROUND5-DROP: old copy of a Characters row; unread since R5.4, unwritten since R5.6.
-    [Column(TypeName = "jsonb")]
-    [Obsolete(ReadCharactersInstead)]
-    public int[]? CraftLevels { get; set; }
-
-    // ROUND5-DROP: old copy of a Characters row; unread since R5.4, unwritten since R5.6.
-    [Column(TypeName = "jsonb")]
-    [Obsolete(ReadCharactersInstead)]
-    public int[]? Alt1CraftLevels { get; set; }
-
-    // ROUND5-DROP: old copy of a Characters row; unread since R5.4, unwritten since R5.6.
-    [Column(TypeName = "jsonb")]
-    [Obsolete(ReadCharactersInstead)]
-    public int[]? Alt2CraftLevels { get; set; }
 
     public string? TimeZone { get; set; }
 

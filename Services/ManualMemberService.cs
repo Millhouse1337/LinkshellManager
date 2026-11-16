@@ -14,7 +14,7 @@ namespace LinkshellManagerDiscordApp.Services;
 // later signups auto-recognize them.
 //
 // Names are written as the account's characters (CharacterWriter); the save copies the main onto
-// the account's CharacterName and the roster name. A name the account already has is skipped.
+// the account's CharacterName. A name the account already has is skipped.
 public sealed class ManualMemberService
 {
     public const int MaxCharacterNameLength = CharacterWriter.MaxNameLength;

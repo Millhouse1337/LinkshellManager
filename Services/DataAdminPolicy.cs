@@ -138,7 +138,7 @@ public sealed class DataAdminPolicy
                 LabelColumns = new[] { nameof(AppUser.CharacterName), nameof(AppUser.UserName), nameof(AppUser.Email) },
                 // IsSuperAdmin is seeded from configuration only (Program.cs); Email/UserName drive login.
                 // Names, jobs and crafts are edited on the account's Characters rows (Round 5): the
-                // account's own copies of them (CharacterName, the alts) are shown, never edited.
+                // account's own copy of the main's name (CharacterName) is shown, never edited.
                 EditableAllowList = new[]
                 {
                     nameof(AppUser.TimeZone), nameof(AppUser.PrimaryLinkshellId),
@@ -153,16 +153,10 @@ public sealed class DataAdminPolicy
                 // them in step with the ledger (INV-1 in ApplicationDbContext); shown here, never edited.
                 // The role is edited by its id (LinkshellRoleId, the source); every save copies that role's
                 // name into Rank (ApplicationDbContext.StampMembershipRoles), so Rank is shown, never edited.
-                // The two-column foreign key refuses another linkshell's role. The roster name is an old
-                // copy of the account's main that nothing reads or writes since Round 5 (R5.6), so it is
-                // shown, never edited.
+                // The two-column foreign key refuses another linkshell's role.
                 ReadOnlyColumns = Names(
                     nameof(AppUserLinkshell.LinkshellDkp), nameof(AppUserLinkshell.SeededDkpEarned), nameof(AppUserLinkshell.SeededDkpSpent),
                     nameof(AppUserLinkshell.DkpSeedLedgerId), nameof(AppUserLinkshell.DkpPoolLedgerFromId),
-#pragma warning disable CS0618 // Round 5: the roster name is shown read-only, never edited.
-                    // ROUND5-DROP: goes with the roster name column.
-                    nameof(AppUserLinkshell.CharacterName),
-#pragma warning restore CS0618
                     nameof(AppUserLinkshell.Rank)),
             },
             [typeof(DiscordActivityUser)] = new()

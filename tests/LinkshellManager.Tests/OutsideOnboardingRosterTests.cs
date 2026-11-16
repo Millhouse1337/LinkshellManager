@@ -56,7 +56,7 @@ public class OutsideOnboardingRosterTests
         db.Users.Add(new AppUser { Id = appUserId, UserName = appUserId, CharacterName = name, IsPlaceholder = placeholder });
         db.AppUserLinkshells.Add(new AppUserLinkshell
         {
-            LinkshellId = Ls, AppUserId = appUserId, CharacterName = name, DiscordUserId = discordUserId,
+            LinkshellId = Ls, AppUserId = appUserId, DiscordUserId = discordUserId,
             Rank = LinkshellRanks.Member, Status = "Active",
         });
         db.SaveChanges();
@@ -76,8 +76,6 @@ public class OutsideOnboardingRosterTests
         var member = Assert.Single(db.AppUserLinkshells.Include(m => m.AppUser));
         Assert.Equal(result.AppUserId, member.AppUserId);
         Assert.Equal(Ls, member.LinkshellId);
-        // Since R5.6 no roster name is written: the roster shows the account's main (below).
-        Assert.Null(member.CharacterName);
         Assert.Equal(LinkshellRanks.Member, member.Rank);
         Assert.Equal("Active", member.Status);
         Assert.Equal(0, member.LinkshellDkp);

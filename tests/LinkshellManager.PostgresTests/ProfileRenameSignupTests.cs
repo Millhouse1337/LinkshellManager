@@ -64,11 +64,10 @@ public class ProfileRenameSignupTests : IAsyncLifetime
         Assert.True(fourth.Succeeded, string.Join("; ", fourth.Errors.Select(e => e.Description)));
         Assert.Equal("Altnew", await ParticipationNameAsync(seeded.OnAlt));
 
-        // Since R5.6 the roster name is not written: it keeps what it was seeded with. The account's
-        // CharacterName follows the main.
+        // The account's CharacterName (what the roster shows) follows the main.
         await using var check = _pg.CreateContext();
         var link = await check.AppUserLinkshells.AsNoTracking().Include(l => l.AppUser).SingleAsync(l => l.AppUserId == "me");
-        Assert.Equal(("Mine", "Altnew"), (link.CharacterName, link.AppUser!.CharacterName));
+        Assert.Equal("Altnew", link.AppUser!.CharacterName);
     }
 
     // The old rule's other half: an open sign-up with no name at all still takes the main's.
@@ -97,9 +96,9 @@ public class ProfileRenameSignupTests : IAsyncLifetime
         await db.SaveChangesAsync();
         db.Users.Add(new AppUser
         {
-            Id = "me", UserName = "me", CharacterName = "Mine", AltCharacterName1 = "Altone", AltCharacterName2 = "Alttwo",
-        });
-        db.AppUserLinkshells.Add(new AppUserLinkshell { LinkshellId = linkshell.Id, AppUserId = "me", CharacterName = "Mine" });
+            Id = "me", UserName = "me", CharacterName = "Mine",
+        }.WithAlts("Altone", "Alttwo"));
+        db.AppUserLinkshells.Add(new AppUserLinkshell { LinkshellId = linkshell.Id, AppUserId = "me" });
 
         var setup = new PartySetup { LinkshellId = linkshell.Id, Name = "Sky" };
         var slotA = new PartySetupSlot { SortOrder = 0 };

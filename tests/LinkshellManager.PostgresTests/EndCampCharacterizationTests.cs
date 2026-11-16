@@ -172,10 +172,16 @@ public class EndCampCharacterizationTests : IAsyncLifetime
 
         db.Users.AddRange(
             new AppUser { Id = "alpha", UserName = "alpha", CharacterName = "Alpha" },
-            new AppUser { Id = "beta", UserName = "beta", CharacterName = "Beta", AltCharacterName1 = "Betalt" },
+            new AppUser { Id = "beta", UserName = "beta", CharacterName = "Beta" },
             new AppUser { Id = "gamma", UserName = "gamma", CharacterName = "Gamma", IsPlaceholder = true },
             new AppUser { Id = "delta", UserName = "delta", CharacterName = "Delta" },
             new AppUser { Id = "echo", UserName = "echo", CharacterName = "Echo" });
+        // Alpha's and Beta's rows first, in the order the snapshots number them; the save gives the
+        // others their main from CharacterName.
+        TestCharacters.Add(db,
+            TestCharacters.Row("alpha", Character.MainSlot, "Alpha"),
+            TestCharacters.Row("beta", Character.MainSlot, "Beta"),
+            TestCharacters.Row("beta", Character.Alt1Slot, "Betalt"));
         await db.SaveChangesAsync();
 
         // Balances that match the ledger: one opening row per member in the HNM pool.
@@ -187,7 +193,7 @@ public class EndCampCharacterizationTests : IAsyncLifetime
         {
             db.AppUserLinkshells.Add(new AppUserLinkshell
             {
-                LinkshellId = linkshell.Id, AppUserId = id, CharacterName = name, LinkshellDkp = dkp,
+                LinkshellId = linkshell.Id, AppUserId = id, LinkshellDkp = dkp,
             });
             if (dkp != 0)
             {

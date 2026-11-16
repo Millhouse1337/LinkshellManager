@@ -11,12 +11,11 @@ namespace LinkshellManagerDiscordApp.Services;
 // trimmed, with blank slots and a slot repeating the same account's name left out. A left-out
 // repeat never changes an answer: the earlier slot gives the account that name first.
 //
-// The account's MAIN NAME is still AppUser.CharacterName (the account's display name). The roster
-// name on a membership (AppUserLinkshell.CharacterName) is no longer read at all: it is only ever a
-// copy of the account's main.
+// The account's MAIN NAME is still AppUser.CharacterName (the account's display name). A membership
+// has no name of its own (Round5Contract dropped the old roster name, only ever a copy of the main).
 //
 // Characters is also where names are WRITTEN, through CharacterWriter (R5.5); the account's
-// CharacterName and old columns are copies the save keeps. Rows are read AsNoTracking.
+// CharacterName is a copy the save keeps. Rows are read AsNoTracking.
 public static class AccountCharacters
 {
     // Every Characters row of every account that has a membership in the linkshell, by account.

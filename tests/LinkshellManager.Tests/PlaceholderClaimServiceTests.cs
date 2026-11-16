@@ -30,7 +30,7 @@ public class PlaceholderClaimServiceTests
             .Options);
         db.Linkshells.Add(new Linkshell { Id = Ls, LinkshellName = "LS" });
         db.Users.Add(new AppUser { Id = Real, UserName = "real", CharacterName = "Bob" });
-        db.Users.Add(new AppUser { Id = Ph, UserName = "ph", CharacterName = "Bobalt", AltCharacterName1 = "Bobthree", IsPlaceholder = true });
+        db.Users.Add(new AppUser { Id = Ph, UserName = "ph", CharacterName = "Bobalt", IsPlaceholder = true }.WithAlts("Bobthree"));
         db.SaveChanges();
         return db;
     }
@@ -39,7 +39,7 @@ public class PlaceholderClaimServiceTests
 
     private static AppUserLinkshell Member(ApplicationDbContext db, int id, string appUserId, string name, double dkp)
     {
-        var member = new AppUserLinkshell { Id = id, LinkshellId = Ls, AppUserId = appUserId, CharacterName = name, LinkshellDkp = dkp };
+        var member = new AppUserLinkshell { Id = id, LinkshellId = Ls, AppUserId = appUserId, LinkshellDkp = dkp };
         db.AppUserLinkshells.Add(member);
         db.SaveChanges();
         return member;
@@ -70,15 +70,13 @@ public class PlaceholderClaimServiceTests
         Assert.Null(member.DiscordUserId);
         Assert.Null(db.Users.Find(Ph));
         // The real account had no alts: the placeholder's main takes the first empty alt slot and its
-        // alt the next (owner decision 2, Round 5), so both names still find this account. The moved
-        // roster row keeps the roster name it had (nothing writes or reads it since R5.6); the roster
+        // alt the next (owner decision 2, Round 5), so both names still find this account. The roster
         // shows the real account's main.
         var real = db.Users.Find(Real)!;
         Assert.Equal("Bob", real.CharacterName);
         Assert.Equal(new[] { "Bob", "Bobalt", "Bobthree" },
             db.Characters.AsNoTracking().Where(c => c.AppUserId == Real).OrderBy(c => c.Slot).Select(c => c.Name).ToArray());
         Assert.Empty(result.NamesNotKept);
-        Assert.Equal("Bobalt", member.CharacterName);
 
         var rows = db.DkpLedgerEntries.ToList();
         Assert.All(rows, r => Assert.Equal(Real, r.AppUserId));
@@ -307,7 +305,7 @@ public class PlaceholderClaimServiceTests
         using var db = NewDb();
         db.Linkshells.Add(new Linkshell { Id = 2, LinkshellName = "Other" });
         Member(db, 11, Ph, "Bobalt", 40);
-        db.AppUserLinkshells.Add(new AppUserLinkshell { Id = 12, LinkshellId = 2, AppUserId = Ph, CharacterName = "Bobalt", LinkshellDkp = 7 });
+        db.AppUserLinkshells.Add(new AppUserLinkshell { Id = 12, LinkshellId = 2, AppUserId = Ph, LinkshellDkp = 7 });
         db.SaveChanges();
 
         var result = await NewService(db).ClaimPlaceholderAsync(Ph, Real, Ls, CancellationToken.None);

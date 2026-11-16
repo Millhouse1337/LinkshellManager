@@ -23,8 +23,8 @@ public class Character
     public const short Alt1Slot = 1;
     public const short Alt2Slot = 2;
 
-    // Longest name the table holds. While the old account columns exist, CharacterWriter takes at most
-    // 64 (CharacterWriter.MaxNameLength).
+    // Longest name the table holds. CharacterWriter takes at most 64 for now (CharacterWriter.MaxNameLength:
+    // a rollback to update B re-adds varchar(64) copies of the alt names).
     public const int MaxNameLength = 256;
 
     [Key]

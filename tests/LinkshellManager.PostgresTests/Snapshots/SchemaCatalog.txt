@@ -75,7 +75,6 @@ column	AppUserEvents.WdArrivalWindow	integer
 column	AppUserEvents.WdDepartureWindow	integer
 column	AppUserEvents.WithdrewFromEvent	boolean NOT NULL DEFAULT false
 column	AppUserLinkshells.AppUserId	text
-column	AppUserLinkshells.CharacterName	text
 column	AppUserLinkshells.DateJoined	timestamp with time zone
 column	AppUserLinkshells.DiscordIdConfirmed	boolean NOT NULL DEFAULT false
 column	AppUserLinkshells.DiscordUserId	character varying(32)
@@ -105,28 +104,15 @@ column	AspNetUserTokens.Name	character varying(128) NOT NULL
 column	AspNetUserTokens.UserId	text NOT NULL
 column	AspNetUserTokens.Value	text
 column	AspNetUsers.AccessFailedCount	integer NOT NULL
-column	AspNetUsers.Alt1CraftLevels	jsonb
-column	AspNetUsers.Alt1JobLevels	jsonb
-column	AspNetUsers.Alt1MeritJobs	jsonb
-column	AspNetUsers.Alt1StrongJobs	jsonb
-column	AspNetUsers.Alt2CraftLevels	jsonb
-column	AspNetUsers.Alt2JobLevels	jsonb
-column	AspNetUsers.Alt2MeritJobs	jsonb
-column	AspNetUsers.Alt2StrongJobs	jsonb
-column	AspNetUsers.AltCharacterName1	character varying(64)
-column	AspNetUsers.AltCharacterName2	character varying(64)
 column	AspNetUsers.CharacterName	text
 column	AspNetUsers.ConcurrencyStamp	text
-column	AspNetUsers.CraftLevels	jsonb
 column	AspNetUsers.Email	character varying(256)
 column	AspNetUsers.EmailConfirmed	boolean NOT NULL
 column	AspNetUsers.Id	text NOT NULL
 column	AspNetUsers.IsPlaceholder	boolean NOT NULL DEFAULT false
 column	AspNetUsers.IsSuperAdmin	boolean NOT NULL
-column	AspNetUsers.JobLevels	jsonb
 column	AspNetUsers.LockoutEnabled	boolean NOT NULL
 column	AspNetUsers.LockoutEnd	timestamp with time zone
-column	AspNetUsers.MeritJobs	jsonb
 column	AspNetUsers.NormalizedEmail	character varying(256)
 column	AspNetUsers.NormalizedUserName	character varying(256)
 column	AspNetUsers.PasswordHash	text
@@ -134,7 +120,6 @@ column	AspNetUsers.PhoneNumber	text
 column	AspNetUsers.PhoneNumberConfirmed	boolean NOT NULL
 column	AspNetUsers.PrimaryLinkshellId	integer
 column	AspNetUsers.SecurityStamp	text
-column	AspNetUsers.StrongJobs	jsonb
 column	AspNetUsers.TimeZone	text
 column	AspNetUsers.TwoFactorEnabled	boolean NOT NULL
 column	AspNetUsers.UserName	character varying(256)

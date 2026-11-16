@@ -60,11 +60,11 @@ public class JoinRequestTests : IAsyncLifetime
             new AppUser { Id = Other, UserName = Other, CharacterName = "Stranger" });
         await db.SaveChangesAsync();
         db.AppUserLinkshells.AddRange(
-            new AppUserLinkshell { LinkshellId = hunters.Id, AppUserId = Leader, CharacterName = "Boss", Rank = LinkshellRanks.Leader, LinkshellDkp = 0 },
-            new AppUserLinkshell { LinkshellId = hunters.Id, AppUserId = Officer, CharacterName = "Helper", Rank = LinkshellRanks.Officer, LinkshellDkp = 0 },
-            new AppUserLinkshell { LinkshellId = hunters.Id, AppUserId = Member, CharacterName = "Secretname", Rank = LinkshellRanks.Member, LinkshellDkp = 1234.5 },
-            new AppUserLinkshell { LinkshellId = locked.Id, AppUserId = Leader, CharacterName = "Boss", Rank = LinkshellRanks.Leader, LinkshellDkp = 0 },
-            new AppUserLinkshell { LinkshellId = unnamed.Id, AppUserId = Leader, CharacterName = "Boss", Rank = LinkshellRanks.Leader, LinkshellDkp = 0 });
+            new AppUserLinkshell { LinkshellId = hunters.Id, AppUserId = Leader, Rank = LinkshellRanks.Leader, LinkshellDkp = 0 },
+            new AppUserLinkshell { LinkshellId = hunters.Id, AppUserId = Officer, Rank = LinkshellRanks.Officer, LinkshellDkp = 0 },
+            new AppUserLinkshell { LinkshellId = hunters.Id, AppUserId = Member, Rank = LinkshellRanks.Member, LinkshellDkp = 1234.5 },
+            new AppUserLinkshell { LinkshellId = locked.Id, AppUserId = Leader, Rank = LinkshellRanks.Leader, LinkshellDkp = 0 },
+            new AppUserLinkshell { LinkshellId = unnamed.Id, AppUserId = Leader, Rank = LinkshellRanks.Leader, LinkshellDkp = 0 });
         await db.SaveChangesAsync();
         return (hunters.Id, locked.Id);
     }
@@ -290,8 +290,6 @@ public class JoinRequestTests : IAsyncLifetime
         Assert.Equal(LinkshellRanks.Member, membership.Rank);
         Assert.Equal("Active", membership.Status);
         Assert.Equal(0, membership.LinkshellDkp);
-        // Since R5.6 a new membership has no roster name: the roster shows the account's main.
-        Assert.Null(membership.CharacterName);
 
         var answered = await RequestRowAsync(Player, hunters);
         Assert.Equal(JoinRequestService.ApprovedStatus, answered.Status);
@@ -379,7 +377,7 @@ public class JoinRequestTests : IAsyncLifetime
         {
             db.AppUserLinkshells.Add(new AppUserLinkshell
             {
-                LinkshellId = hunters, AppUserId = Player, CharacterName = "Newbie", Rank = LinkshellRanks.Member, LinkshellDkp = 7,
+                LinkshellId = hunters, AppUserId = Player, Rank = LinkshellRanks.Member, LinkshellDkp = 7,
             });
             await db.SaveChangesAsync();
         }

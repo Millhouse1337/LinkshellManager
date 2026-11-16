@@ -18,7 +18,7 @@ namespace LinkshellManagerDiscordApp.Services;
 //
 // Always: the two alts must differ and an alt must differ from the main.
 // Only for names that changed: no name may be longer than CharacterWriter.MaxNameLength (64 characters
-// while the old account columns are mirrored; they are varchar(64)).
+// while a rollback can re-add the varchar(64) alt columns; see there).
 //
 // Names are compared trimmed and ignoring capitals, the way CharacterResolver compares them.
 public sealed class CharacterNameValidator

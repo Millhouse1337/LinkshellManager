@@ -14,12 +14,12 @@
 --           LinkshellMonsterTimings, LinkshellBanners, DkpPools, DkpPoolEventTypes,
 --           HnmRecurringBoards), AddonApiTokens, AddonPairingCodes,
 --           AppSettings, DiscordActivityUsers, AspNet* (users/identity),
---           Characters (the copy of each account's names and jobs),
+--           Characters (each account's names, jobs and crafts),
 --           PartySetups templates (+Alliances/Parties/Slots), Announcements,
 --           Rules, Invites, Charts (Chart* tables), JobRatings,
 --           LinkshellPresences, PlaceholderClaimRequests, and the
---           AppUserLinkshells ROSTER rows. Profile jobs live on the account
---           (AspNetUsers) and in Characters, so they are kept too.
+--           AppUserLinkshells ROSTER rows. Profile names, jobs and crafts live
+--           only in Characters (since Round 5), so they are kept too.
 --
 --  WIPES:   Events (+ comments, roster snapshots and each event's own party
 --           board copy), ToDs, Loot, Auctions, DKP ledger, Attendance,

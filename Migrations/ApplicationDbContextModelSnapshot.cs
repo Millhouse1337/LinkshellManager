@@ -180,47 +180,12 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<int>("AccessFailedCount")
                         .HasColumnType("integer");
 
-                    b.PrimitiveCollection<string>("Alt1CraftLevels")
-                        .HasColumnType("jsonb");
-
-                    b.PrimitiveCollection<string>("Alt1JobLevels")
-                        .HasColumnType("jsonb");
-
-                    b.PrimitiveCollection<string>("Alt1MeritJobs")
-                        .HasColumnType("jsonb");
-
-                    b.PrimitiveCollection<string>("Alt1StrongJobs")
-                        .HasColumnType("jsonb");
-
-                    b.PrimitiveCollection<string>("Alt2CraftLevels")
-                        .HasColumnType("jsonb");
-
-                    b.PrimitiveCollection<string>("Alt2JobLevels")
-                        .HasColumnType("jsonb");
-
-                    b.PrimitiveCollection<string>("Alt2MeritJobs")
-                        .HasColumnType("jsonb");
-
-                    b.PrimitiveCollection<string>("Alt2StrongJobs")
-                        .HasColumnType("jsonb");
-
-                    b.Property<string>("AltCharacterName1")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<string>("AltCharacterName2")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
                     b.Property<string>("CharacterName")
                         .HasColumnType("text");
 
                     b.Property<string>("ConcurrencyStamp")
                         .IsConcurrencyToken()
                         .HasColumnType("text");
-
-                    b.PrimitiveCollection<string>("CraftLevels")
-                        .HasColumnType("jsonb");
 
                     b.Property<string>("Email")
                         .HasMaxLength(256)
@@ -235,17 +200,11 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<bool>("IsSuperAdmin")
                         .HasColumnType("boolean");
 
-                    b.PrimitiveCollection<string>("JobLevels")
-                        .HasColumnType("jsonb");
-
                     b.Property<bool>("LockoutEnabled")
                         .HasColumnType("boolean");
 
                     b.Property<DateTimeOffset?>("LockoutEnd")
                         .HasColumnType("timestamp with time zone");
-
-                    b.PrimitiveCollection<string>("MeritJobs")
-                        .HasColumnType("jsonb");
 
                     b.Property<string>("NormalizedEmail")
                         .HasMaxLength(256)
@@ -269,9 +228,6 @@ namespace LinkshellManagerDiscordApp.Migrations
 
                     b.Property<string>("SecurityStamp")
                         .HasColumnType("text");
-
-                    b.PrimitiveCollection<string>("StrongJobs")
-                        .HasColumnType("jsonb");
 
                     b.Property<string>("TimeZone")
                         .HasColumnType("text");
@@ -525,9 +481,6 @@ namespace LinkshellManagerDiscordApp.Migrations
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<string>("AppUserId")
-                        .HasColumnType("text");
-
-                    b.Property<string>("CharacterName")
                         .HasColumnType("text");
 
                     b.Property<DateTime?>("DateJoined")

@@ -13,9 +13,10 @@ namespace LinkshellManager.PostgresTests;
 // old name, job and craft columns INTO Characters (CharacterSync.SyncSql, word for word below).
 //
 // Rolling back to that build is safe only if that copy changes nothing: the old columns must hold
-// exactly what Characters holds. Since R5.6 they do only after the "mirror refill" SQL
-// (docs/round5-drop-manifest.md). AccountNameStampTests runs the refill and then this copy after
-// every writer path of the current build, and checks that not one Characters row changed.
+// exactly what Characters holds. Since R5.6 they do only after the "mirror refill", which since R5.7
+// is part of Round5Contract.ReAddSql and RollbackSql (docs/round5-drop-manifest.md).
+// Round5ContractRoundTripTests runs the rollback SQL and then this copy, and checks that not one
+// Characters row changed.
 internal static class PreviousBuildCharacterCopy
 {
     private const string Ws = @" \t\n\v\f\r\u0085\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000";

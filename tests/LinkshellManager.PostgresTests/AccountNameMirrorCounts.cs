@@ -6,12 +6,15 @@ using Microsoft.EntityFrameworkCore;
 
 namespace LinkshellManager.PostgresTests;
 
-// The start-up mirror check of the R5.5 build (Data/AccountNameMirrorCheck.cs at 1adf6d6), kept here
-// for the tests only. R5.6 stopped copying Characters onto the old account columns and the roster
-// names, so the app no longer counts them at start-up. The tests still use the counts where the
-// copies must be exact:
+// The start-up mirror check of the R5.5 build ("update B", Data/AccountNameMirrorCheck.cs at
+// 1adf6d6), kept here for the tests only. R5.6 stopped copying Characters onto the old account
+// columns and the roster names, and R5.7 (Round5Contract) dropped them. The tests still use the
+// counts where the copies must be exact:
 // - CharactersBecomeSourceRoundTripTests: that migration makes them exact;
-// - the R5.6 "mirror refill" SQL (docs/round5-drop-manifest.md) makes them exact again.
+// - Round5ContractRoundTripTests: the rollback SQL (Round5Contract.RollbackSql) re-adds the columns
+//   and makes them exact again, so update B's own start-up check finds 0 differences.
+// CountAsync needs the old columns (a database before Round5Contract, or after its rollback SQL);
+// MainsAsync works on any.
 //
 // Three counts:
 // - Accounts: accounts whose old columns would give different Characters rows than they have (by
@@ -75,6 +78,10 @@ internal static class AccountNameMirrorCounts
             await CountAsync(db, AccountsSql, cancellationToken),
             await CountAsync(db, MainsSql, cancellationToken),
             await CountAsync(db, RosterNamesSql, cancellationToken));
+
+    // Accounts whose CharacterName is not exactly their main's name.
+    public static Task<int> MainsAsync(ApplicationDbContext db, CancellationToken cancellationToken) =>
+        CountAsync(db, MainsSql, cancellationToken);
 
     private static Task<int> CountAsync(ApplicationDbContext db, string sql, CancellationToken cancellationToken) =>
         db.Database.SqlQueryRaw<int>(sql).SingleAsync(cancellationToken);

@@ -13,8 +13,8 @@ namespace LinkshellManagerDiscordApp.Services;
 // addon, the Discord sign-in and sign-up, placeholder create and claim) loads a CharacterSet here,
 // changes it, and saves the context as usual. The save hook (ApplicationDbContext
 // .StampAccountsFromCharactersAsync) then copies the main's name onto the account's CharacterName
-// (the account's display name). Since R5.6 nothing copies onto the old AspNetUsers alt, job and
-// craft columns any more.
+// (the account's display name). Nothing else is copied: the old AspNetUsers alt, job and craft
+// columns were dropped by Round5Contract (R5.7).
 //
 // Rules:
 // - names are trimmed; a blank name removes that slot's row (and its jobs and crafts with it);
@@ -32,10 +32,11 @@ namespace LinkshellManagerDiscordApp.Services;
 // are simply loaded.
 public static class CharacterWriter
 {
-    // The longest name while the old account columns exist: AltCharacterName1/2 are varchar(64), and
-    // the R5.5 build (the one a rollback swaps in) still copies every name into them, so a longer
-    // name saved now would make its saves of that account fail. (The game's own limit is 15,
-    // CharacterNameFormat.MaxLength.)
+    // The longest name, kept while a rollback can still swap in the update B build (R5.5): its
+    // rollback SQL (Round5Contract.RollbackSql) re-adds AltCharacterName1/2 as varchar(64) and copies
+    // every name into them, and that build keeps copying on every save, so a longer name saved now
+    // would make the rollback fail. It can go up to Character.MaxNameLength one deploy after R5.7.
+    // (The game's own limit is 15, CharacterNameFormat.MaxLength.)
     public const int MaxNameLength = 64;
 
     // pg_advisory_xact_lock(class, key) class for "changing this account's characters", the same class

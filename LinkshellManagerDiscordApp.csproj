@@ -9,10 +9,6 @@
          artifacts out of every default item glob so `dotnet publish` never
          ships stale binaries. (bin-ef/ is also gitignored.) -->
     <DefaultItemExcludes>$(DefaultItemExcludes);bin-ef\**;artifacts\**</DefaultItemExcludes>
-    <!-- Round 5 (names): the old account name/job columns and the roster name are [Obsolete], so a
-         new READER of them fails the build. Writers that still fill them use #pragma. Only this
-         project: the test projects still seed the old columns. -->
-    <WarningsAsErrors>$(WarningsAsErrors);CS0618</WarningsAsErrors>
   </PropertyGroup>
 
   <ItemGroup>

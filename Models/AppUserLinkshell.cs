@@ -34,12 +34,8 @@ public class AppUserLinkshell
     [ForeignKey(nameof(LinkshellId))]
     public Linkshell? Linkshell { get; set; }
 
-    // The roster name. Round 5: never read (the roster shows the account's CharacterName and names
-    // resolve through the account's Characters), and never written since R5.6: it holds what the
-    // R5.5 build last copied there (the account's main), and a membership made since has none.
-    // ROUND5-DROP: roster name, unread since R5.4, unwritten since R5.6.
-    [Obsolete("Round 5: the roster name is not read. Use AppUser.CharacterName (the account main) instead.")]
-    public string? CharacterName { get; set; }
+    // (A membership has no name of its own. The roster shows the account's CharacterName, the main,
+    // and names resolve through the account's Characters. Round5Contract dropped the old roster name.)
 
     public string? Rank { get; set; }
 

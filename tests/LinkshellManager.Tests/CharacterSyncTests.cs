@@ -7,84 +7,82 @@ using Xunit;
 
 namespace LinkshellManager.Tests;
 
-// What is left of CharacterSync since Round 5 (R5.5), and the save hook's two guards. Characters is
-// the only written source of names; the account columns are a mirror the save writes from it. The
-// copy the other way (account columns into Characters, after every save) is gone: a change made
-// straight on an existing account's columns is undone, and only a NEW account saved with names in its
-// old columns has them taken as its characters. (These tests used to check that copy.)
+// What is left of CharacterSync since Round 5, and the save hook's two guards. Characters is the only
+// source of names, jobs and crafts; the account keeps only CharacterName, a copy of the main's name
+// that the save writes. A change made straight to an existing account's CharacterName is undone,
+// and only a NEW account saved with a CharacterName and no main row has it taken as its main.
+// (These tests used to check the copy from the old account columns, which Round5Contract dropped.)
 public class CharacterSyncTests
 {
-    // The save writes every one of these from Characters, so a name, job or craft column added to the
-    // account later must be added to the list too.
+    // Round5Contract (R5.7) dropped the account's old alt, job and craft columns. The account's only
+    // name column left is CharacterName, the main's name the save writes; a new one must not appear
+    // without going through Characters.
     [Fact]
-    public void SourceProperties_AreExactlyTheAccountsNameJobAndCraftColumns()
+    public void TheAccountHasNoNameJobOrCraftColumn_ButTheMainName()
     {
-        var expected = typeof(AppUser)
+        var names = typeof(AppUser)
             .GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
             .Select(property => property.Name)
             .Where(name => name.Contains("CharacterName", StringComparison.Ordinal)
                 || name.EndsWith("JobLevels", StringComparison.Ordinal)
                 || name.EndsWith("StrongJobs", StringComparison.Ordinal)
                 || name.EndsWith("MeritJobs", StringComparison.Ordinal)
-                || name.EndsWith("CraftLevels", StringComparison.Ordinal))
-            .OrderBy(name => name, StringComparer.Ordinal);
+                || name.EndsWith("CraftLevels", StringComparison.Ordinal));
 
-        Assert.Equal(expected, CharacterSync.SourceProperties.OrderBy(name => name, StringComparer.Ordinal));
-        Assert.Equal(15, CharacterSync.SourceProperties.Count);
+        Assert.Equal(new[] { nameof(AppUser.CharacterName) }, names);
+        Assert.DoesNotContain(typeof(AppUserLinkshell).GetProperties(), property => property.Name == "CharacterName");
     }
 
-    // A new account saved with only its old columns (as tests seed members) gets them as its
-    // characters, trimmed, a repeated name and a name too long (CharacterWriter.MaxNameLength) left
-    // out; CharacterName then follows the main's row. Since R5.6 the old columns are not rewritten:
-    // they keep what the new account was saved with.
+    // A new account saved with a CharacterName and no main row (as tests seed members) gets it as its
+    // main, trimmed; a blank name and a name too long (CharacterWriter.MaxNameLength) give no row.
+    // Alt rows saved with it are kept, and a main row saved with it wins over the CharacterName.
+    // CharacterName then follows the main's row.
     [Fact]
-    public async Task ANewAccountsOldColumns_BecomeItsCharacters_AndTheMainNameFollowsThem()
+    public async Task ANewAccountsCharacterName_BecomesItsMain_AndTheMainNameFollowsIt()
     {
         var options = NewOptions();
+        var tooLong = new string('x', CharacterWriter.MaxNameLength + 1);
         await using (var db = new ApplicationDbContext(options))
         {
-            db.Users.Add(new AppUser
-            {
-                Id = "u1", UserName = "u1", CharacterName = " Bob ", JobLevels = new[] { 75 },
-                AltCharacterName1 = new string('x', CharacterWriter.MaxNameLength + 1), AltCharacterName2 = "BOB",
-            });
-            db.Users.Add(new AppUser { Id = "u2", UserName = "u2", CharacterName = "Ann", AltCharacterName2 = "Annalt" });
+            db.Users.Add(new AppUser { Id = "u1", UserName = "u1", CharacterName = " Bob " });
+            db.Users.Add(new AppUser { Id = "u2", UserName = "u2", CharacterName = "Ann" }.WithAlts(null, "Annalt"));
+            db.Users.Add(new AppUser { Id = "u3", UserName = "u3", CharacterName = tooLong });
+            db.Users.Add(new AppUser { Id = "u4", UserName = "u4", CharacterName = "Old" });
+            TestCharacters.Add(db, TestCharacters.Row("u4", Character.MainSlot, "New", jobLevels: new[] { 75 }));
+            db.Users.Add(new AppUser { Id = "u5", UserName = "u5", CharacterName = "  " });
             await db.SaveChangesAsync();
         }
 
-        Assert.Equal(new[] { ("u1", (short)0, "Bob", "bob"), ("u2", (short)0, "Ann", "ann"), ("u2", (short)2, "Annalt", "annalt") },
+        Assert.Equal(
+            new[] { ("u1", (short)0, "Bob", "bob"), ("u2", (short)0, "Ann", "ann"), ("u2", (short)2, "Annalt", "annalt"), ("u4", (short)0, "New", "new") },
             await RowsAsync(options));
         await using var check = new ApplicationDbContext(options);
-        var u1 = await check.Users.AsNoTracking().SingleAsync(u => u.Id == "u1");
-        Assert.Equal(("Bob", new string('x', CharacterWriter.MaxNameLength + 1), "BOB"), (u1.CharacterName, u1.AltCharacterName1, u1.AltCharacterName2));
-        Assert.Equal(new[] { 75 }, u1.JobLevels);
+        var names = await check.Users.AsNoTracking().OrderBy(u => u.Id).Select(u => u.CharacterName).ToListAsync();
+        Assert.Equal(new[] { "Bob", "Ann", tooLong, "New", "  " }, names);
     }
 
-    // An existing account's copy columns changed straight (not through CharacterWriter): the change
-    // is undone, so they never change by hand. Other columns save as usual.
+    // An existing account's CharacterName changed straight (not through CharacterWriter): the change
+    // is undone, so it never changes by hand. Other columns save as usual.
     [Fact]
-    public async Task ChangingAnExistingAccountsColumnsStraight_IsUndone_AndTheRestSaves()
+    public async Task ChangingAnExistingAccountsMainNameStraight_IsUndone_AndTheRestSaves()
     {
         var options = NewOptions();
         await using (var db = new ApplicationDbContext(options))
         {
-            db.Users.Add(new AppUser { Id = "u1", UserName = "u1", CharacterName = "Bob", AltCharacterName1 = "Bobalt" });
+            db.Users.Add(new AppUser { Id = "u1", UserName = "u1", CharacterName = "Bob" }.WithAlts("Bobalt"));
             await db.SaveChangesAsync();
         }
         await using (var db = new ApplicationDbContext(options))
         {
             var user = await db.Users.SingleAsync(u => u.Id == "u1");
             user.CharacterName = "Robert";
-            user.AltCharacterName1 = null;
-            user.Alt2JobLevels = new[] { 1 };
             user.TimeZone = "Europe/London";
             db.SaveChanges();
         }
 
         await using var check = new ApplicationDbContext(options);
         var saved = await check.Users.AsNoTracking().SingleAsync(u => u.Id == "u1");
-        Assert.Equal(("Bob", "Bobalt", "Europe/London"), (saved.CharacterName, saved.AltCharacterName1, saved.TimeZone));
-        Assert.Null(saved.Alt2JobLevels);
+        Assert.Equal(("Bob", "Europe/London"), (saved.CharacterName, saved.TimeZone));
         Assert.Equal(new[] { ("u1", (short)0, "Bob", "bob"), ("u1", (short)1, "Bobalt", "bobalt") }, await RowsAsync(options));
     }
 
@@ -106,28 +104,6 @@ public class CharacterSyncTests
         }
 
         Assert.Equal(new[] { ("u1", (short)0, "Bob", "bob") }, await RowsAsync(options));
-    }
-
-    // The C# rules the new-account guard (and TestCharacters) use.
-    [Fact]
-    public void DesiredRows_TrimSkipBlankAndTooLong_AndKeepTheFirstSlotOfARepeatedName()
-    {
-        var user = new AppUser
-        {
-            CharacterName = " Twin ", JobLevels = new[] { 1 },
-            AltCharacterName1 = "TWIN", Alt1JobLevels = new[] { 2 },
-            AltCharacterName2 = "Other\t", Alt2CraftLevels = new[] { 3 },
-        };
-        Assert.Equal(
-            new[] { ((short)0, "Twin", "twin"), ((short)2, "Other", "other") },
-            CharacterSync.DesiredRows(user).Select(row => (row.Slot, row.Name, row.NormalizedName)));
-        Assert.Equal(new[] { 1 }, CharacterSync.DesiredRows(user)[0].JobLevels);
-        Assert.Equal(new[] { 3 }, CharacterSync.DesiredRows(user)[1].CraftLevels);
-
-        Assert.Equal(
-            new[] { (short)1 },
-            CharacterSync.DesiredRows(new AppUser { CharacterName = "  ", AltCharacterName1 = "Alt", AltCharacterName2 = new string('y', 257) })
-                .Select(row => row.Slot));
     }
 
     private static DbContextOptions<ApplicationDbContext> NewOptions() =>
