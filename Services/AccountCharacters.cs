@@ -6,12 +6,14 @@ namespace LinkshellManagerDiscordApp.Services;
 
 // THE ACCOUNTS' CHARACTERS, read from the Characters table.
 //
-// Round 5 moves every read of an account's alt names, and of any character's jobs and crafts,
-// here. Characters holds one row per name (slot 0 the main, 1 and 2 the alts), already
+// Since Round 5 every read of an account's alt names, and of any character's jobs and crafts, goes
+// through here. Characters holds one row per name (slot 0 the main, 1 and 2 the alts), already
 // trimmed, with blank slots and a slot repeating the same account's name left out. A left-out
 // repeat never changes an answer: the earlier slot gives the account that name first.
 //
-// The account's MAIN NAME is still AppUser.CharacterName (the account's display name).
+// The account's MAIN NAME is still AppUser.CharacterName (the account's display name). The roster
+// name on a membership (AppUserLinkshell.CharacterName) is no longer read at all: it is only ever a
+// copy of the account's main.
 //
 // The old AspNetUsers columns are still where names are WRITTEN in this build (CharacterSync copies
 // them into Characters on every save). Rows are read AsNoTracking, so a read after a save sees
@@ -85,13 +87,11 @@ public static class AccountCharacters
     public static Character[]? For(IReadOnlyDictionary<string, Character[]> byAccount, string? appUserId) =>
         appUserId is not null && byAccount.TryGetValue(appUserId, out var characters) ? characters : null;
 
-    // The account's characters as the account's three resolve slots. No account (or no rows) means
-    // no names, exactly as a membership with no account had none.
-    public static CharacterNames Names(string? membershipCharacterName, IReadOnlyCollection<Character>? characters) =>
-        new(membershipCharacterName,
-            MainCharacter(characters)?.Name,
-            Alt1(characters)?.Name,
-            Alt2(characters)?.Name);
+    // The account's three resolve names: its main (AppUser.CharacterName) and its two alts. When the
+    // AppUser was not loaded, the main comes from the slot 0 row, which is the same name trimmed. No
+    // account means no names, exactly as a membership with no account had none.
+    public static CharacterNames Names(AppUser? user, IEnumerable<Character>? characters) =>
+        new(user?.CharacterName ?? MainCharacter(characters)?.Name, Alt1(characters)?.Name, Alt2(characters)?.Name);
 
     // A member's name for a snapshot column (ledger, journal, loot): the account's main. Read from
     // the loaded AppUser when there is one (EF fills it in whenever the account is tracked too),
