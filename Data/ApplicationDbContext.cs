@@ -11,7 +11,7 @@ namespace LinkshellManagerDiscordApp.Data
     // per-linkshell LinkshellRoles), so the model keeps only the user tables (AspNetUsers,
     // AspNetUserClaims, AspNetUserLogins, AspNetUserTokens). The three role tables were always
     // empty and were dropped by the DropIdentityRoleTables migration.
-    public class ApplicationDbContext : IdentityUserContext<AppUser>
+    public partial class ApplicationDbContext : IdentityUserContext<AppUser>
     {
         // Length of the Identity login/token key columns (AspNetUserLogins, AspNetUserTokens).
         // Identity reads it from IdentityOptions.Stores while building the model, and every
@@ -1544,6 +1544,7 @@ namespace LinkshellManagerDiscordApp.Data
         public override async Task<int> SaveChangesAsync(
             bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
         {
+            await StampAccountsFromCharactersAsync(async: true, cancellationToken);
             await StampNewMembershipDkpEpochAsync(CollectNewMembershipsNeedingDkpEpoch(), cancellationToken);
             await StampMembershipRolesAsync(CollectMembershipsNeedingRoleStamp(), cancellationToken);
             StampDerivedColumns();
@@ -1589,6 +1590,8 @@ namespace LinkshellManagerDiscordApp.Data
 
         public override int SaveChanges(bool acceptAllChangesOnSuccess)
         {
+            // With async false every query in it runs synchronously, so the task is already complete.
+            StampAccountsFromCharactersAsync(async: false, CancellationToken.None).GetAwaiter().GetResult();
             StampNewMembershipDkpEpoch(CollectNewMembershipsNeedingDkpEpoch());
             StampMembershipRoles(CollectMembershipsNeedingRoleStamp());
             StampDerivedColumns();
