@@ -93,13 +93,11 @@ Current `AppUser` fields include:
 
 - `Id`
 - `UserName`
-- `CharacterName`
-- `AltCharacterName1`
-- `AltCharacterName2`
+- `CharacterName` (a copy of the main character's name, set on every save)
 - `TimeZone`
 - `PrimaryLinkshellId` (its name is read from the `Linkshells` row)
 
-`AltCharacterName1` and `AltCharacterName2` capture the user's alternate in-game character names. They are optional, capped at 64 characters, and validated alongside the primary character name during profile updates.
+The account's characters live in the `Characters` table: slot 0 is the main, slots 1 and 2 the two optional alts, each with its own job and craft levels. Names are capped at 64 characters for now and validated together during profile updates.
 
 Current `DiscordActivityUsers` fields:
 

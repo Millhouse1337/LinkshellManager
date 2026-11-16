@@ -8,7 +8,7 @@ Live is `1adf6d6` ("update B" = plan R5.4 + R5.5). The owner ships R5.6 and R5.7
 | Step | What it does | Migration |
 |---|---|---|
 | R5.6 (`2d67e85`, `34153d9`, `68612f1`, `5c36f97`) | Stops writing the 14 old `AspNetUsers` alt, job and craft columns and the roster name `AppUserLinkshells.CharacterName`. Removes the start-up "Characters mirror" check. | none |
-| R5.7 | Drops the 15 columns (`Round5Contract`, id `20261116221633_Round5Contract`) and deletes the code that still named them. | `Round5Contract` |
+| R5.7 (`ef733c4`, `3ebc387`, plus the runbook) | Drops the 15 columns (`Round5Contract`, id `20261116221633_Round5Contract`) and deletes the code that still named them. | `Round5Contract` |
 
 `AspNetUsers.CharacterName` STAYS (owner decision 1). Every save still sets it to the account's
 main (slot 0) `Characters` name. It is not in this file.

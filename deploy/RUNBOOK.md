@@ -374,6 +374,13 @@ the old build may fail on startup or misread data. Then either undo that migrati
 maps the columns it drops, so stop the service, run the SQL under "Rolling back deploy 4" in
 `docs/round4-drop-manifest.md` (it puts the columns back empty), then swap.
 
+**Round 5 "update C" (R5.6 + R5.7, migration `Round5Contract`) is one of these too.** Update B
+(`1adf6d6`) still maps the 15 columns it drops. Stop the service (step 1 below), take a backup, run
+the SQL under "Rolling back update C" in `docs/round5-drop-manifest.md` in `psql` (it puts the
+columns back, filled from `Characters`, and forgets the migration), then swap (steps 2-4). Its
+"column ... already exists, skipping" notices on a second run are harmless. Never go back further
+than update B.
+
 **The migration squash (Round 4 deploy 5) is NOT one of these**, even though
 `git log --stat` shows every file under `Migrations/` changed: rolling it back is a plain swap
 (see **Migration squash** below).
@@ -459,7 +466,7 @@ Expect **no output**. What a line means:
 | `Migration health: constraint ... is NOT VALID` | A constraint was added without checking old rows. New rows are checked; old ones may break it. |
 | `Migration health: index ... is invalid` | A failed index build left an unusable index behind. |
 | `Migration health: the check could not run` | The read-only check itself failed; start-up continued. Look at the error under it. |
-| `Characters mirror: ...` | Only the Round 5 "update B" build (R5.5, `1adf6d6`) prints this, so you see it only after rolling back to that build. From "update C" (R5.6) on, the old account name/job columns and the roster names are no longer written, so a non-zero count is expected and harmless: update B never reads them. Never roll back further than update B without the "mirror refill" SQL in `docs/round5-drop-manifest.md`. |
+| `Characters mirror: ...` | Only the Round 5 "update B" build (R5.5, `1adf6d6`) prints this, so you see it only after rolling back to that build. Update C drops the columns it compares; the update C rollback SQL in `docs/round5-drop-manifest.md` puts them back filled, so after it the count is 0. A non-zero count is still harmless: update B never reads them. Never roll back further than update B. |
 
 The health check runs on every start, so a problem keeps showing until it is fixed. It only reads.
 
