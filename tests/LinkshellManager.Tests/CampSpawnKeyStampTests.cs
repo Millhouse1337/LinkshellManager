@@ -119,4 +119,17 @@ public class CampSpawnKeyStampTests
         Assert.False(entry.Property(nameof(Event.SpawnKey)).IsModified);
         Assert.True(entry.Property(nameof(Event.EventName)).IsModified);
     }
+
+    // The start-up refill is SQL, so on a database that is not Postgres it does nothing and
+    // does not throw (SpawnKeyRefillTests covers Postgres).
+    [Fact]
+    public async Task StartUpRefill_OnTheInMemoryDatabase_DoesNothing()
+    {
+        await using var db = NewInMemoryContext(Guid.NewGuid().ToString());
+        db.Events.Add(new Event { LinkshellId = 1, AssignedMonsterName = "Tiamat", EventName = "Tiamat" });
+        await db.SaveChangesAsync();
+
+        Assert.Equal(0, await SpawnKeyRefill.RunAsync(
+            db, Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance, CancellationToken.None));
+    }
 }

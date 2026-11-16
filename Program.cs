@@ -652,6 +652,22 @@ if (!app.Environment.IsDevelopment())
                 .LogWarning(ex, "Migration health: the check could not run; start-up continues.");
         }
 
+        // Re-key any camp, timing, ToD or board row whose SpawnKey does not match its monster name
+        // (rows an older build saved while rolled back). Logs a line only for a table it changed.
+        // Never stops start-up.
+        try
+        {
+            await SpawnKeyRefill.RunAsync(
+                services.GetRequiredService<ApplicationDbContext>(),
+                services.GetRequiredService<ILogger<Program>>(),
+                CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            services.GetRequiredService<ILogger<Program>>()
+                .LogWarning(ex, "SpawnKey refill: could not run; start-up continues.");
+        }
+
         // The name lookups read Characters, a copy of the accounts' names kept in step on every
         // save. Copy every account again now, so a copy that failed (or one an older build skipped
         // while it was rolled back to) never outlives a restart. Never stops start-up.
