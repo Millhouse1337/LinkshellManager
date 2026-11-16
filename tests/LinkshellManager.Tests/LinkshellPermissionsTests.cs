@@ -3,6 +3,7 @@ using LinkshellManagerDiscordApp.Models;
 using LinkshellManagerDiscordApp.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
@@ -143,8 +144,10 @@ public class LinkshellPermissionsTests
         Assert.True(await permissions.CanAsync(membership, r => r.CanBid, CancellationToken.None));
         Assert.False(await permissions.CanAsync(membership, r => r.CanManageEvents, CancellationToken.None));
 
-        var role = await permissions.GetEffectiveRoleAsync("Deleted Role", Ls, CancellationToken.None);
+        // The save gave it the Member role (and Rank says so); the id is what is read.
+        var role = await permissions.GetEffectiveRoleAsync(membership, CancellationToken.None);
         Assert.Equal(LinkshellRanks.Member, role?.Name);
+        Assert.Equal(LinkshellRanks.Member, membership.Rank);
     }
 
     [Fact]
@@ -156,7 +159,7 @@ public class LinkshellPermissionsTests
 
         Assert.True(await permissions.CanAsync(membership, r => r.CanBid, CancellationToken.None));
         Assert.False(await permissions.CanAsync(membership, r => r.CanManageMembers, CancellationToken.None));
-        Assert.Equal(LinkshellRanks.Member, (await permissions.GetEffectiveRoleAsync("  ", Ls, CancellationToken.None))?.Name);
+        Assert.Equal(LinkshellRanks.Member, (await permissions.GetEffectiveRoleAsync(membership, CancellationToken.None))?.Name);
     }
 
     [Fact]
@@ -170,65 +173,203 @@ public class LinkshellPermissionsTests
         Assert.False(await permissions.CanAsync(membership, r => r.CanManageTreasury, CancellationToken.None));
     }
 
-    // ---- RosterSwitch: the role is read by id (AppUserLinkshell.LinkshellRoleId) ----------------
+    // ---- R5.2: the role is read by id only (AppUserLinkshell.LinkshellRoleId) -------------------
 
-    // For every kind of Rank a writer can save, the id the save hook picks gives the SAME role and
-    // the same answer to every permission as the name path (GetEffectiveRoleAsync by rank), so
-    // making the id the source changed nobody's rights. The hook also makes Rank that role's exact
-    // name ("officer" becomes "Member", which is what it already got).
+    // Permission parity. For every kind of Rank a writer can save, the id the save hook picks gives
+    // exactly the rights the old name path gave that Rank (OldRoleByRank and OldCanRankBid below are
+    // copies of the code R5.2 deleted), on every surface: LinkshellPermissions, the overview and
+    // the bid check. So reading the id only changed nobody's rights. The hook also makes Rank that
+    // role's exact name ("officer" becomes "Member", which is what it already got).
     [Theory]
+    [InlineData("Leader")]
     [InlineData("leader")]
+    [InlineData("LEADER")]
     [InlineData("Officer")]
     [InlineData(" Officer ")]
     [InlineData("officer")]
     [InlineData("Member")]
     [InlineData("Trial")]
+    [InlineData("Trial ")]
     [InlineData("Raid Lead")]
+    [InlineData(" Raid Lead")]
     [InlineData("raid lead")]
     [InlineData("Deleted Role")]
     [InlineData("")]
+    [InlineData("   ")]
     [InlineData(null)]
-    public async Task RoleById_GivesTheSameAnswerAsRoleByRank(string? rank)
+    public async Task RoleById_GivesTheSameRightsAsTheOldNamePath(string? rank)
     {
         await using var db = NewDb();
         db.Linkshells.Add(new Linkshell { Id = Ls, LinkshellName = "LS1", LootStructure = "Dkp" });
         db.LinkshellRoles.AddRange(LinkshellRoleDefaults.BuildDefaultRoles(Ls));
-        db.LinkshellRoles.Add(new LinkshellRole { LinkshellId = Ls, Name = "Raid Lead", CanManageEvents = true, CanAddLoot = true });
+        db.LinkshellRoles.Add(new LinkshellRole { LinkshellId = Ls, Name = "Raid Lead", CanManageEvents = true, CanAddLoot = true, CanBid = false });
         await db.SaveChangesAsync();
+        var roles = await db.LinkshellRoles.AsNoTracking().Where(r => r.LinkshellId == Ls).ToListAsync();
+        // Worked out from the Rank as written, before the save rewrites it.
+        var oldRole = OldRoleByRank(rank, roles);
+        var oldCanBid = OldCanRankBid(rank, roles);
+
         var membership = await SeedMemberAsync(db, UserId, rank);
         var permissions = await NewServiceAsync(db);
 
         var byId = await permissions.GetEffectiveRoleAsync(membership, CancellationToken.None);
-        // "leader" in any capitals is the Leader by rank (rule 3), whatever role the name finds.
-        var byRank = LinkshellRanks.IsLeader(rank)
-            ? await permissions.GetEffectiveRoleAsync(LinkshellRanks.Leader, Ls, CancellationToken.None)
-            : await permissions.GetEffectiveRoleAsync(rank, Ls, CancellationToken.None);
         Assert.NotNull(byId);
-        Assert.Equal(byRank!.Id, byId!.Id);
-        Assert.Equal(byRank.Name, membership.Rank);
         Assert.Equal(LinkshellRanks.IsLeader(rank), LinkshellRanks.IsLeader(membership.Rank));
-
-        foreach (var flag in AllFlags)
+        if (!LinkshellRanks.IsLeader(rank))
         {
-            var before = LinkshellRanks.IsLeader(rank) || flag(byRank);
-            Assert.Equal(before, await permissions.CanAsync(membership, flag, CancellationToken.None));
+            Assert.Equal(oldRole.Id, byId!.Id);
+            Assert.Equal(oldRole.Name, membership.Rank);
         }
 
-        // The overview reads the same role by id as the name path finds. (Its own name path matched
-        // any capitals, so for "officer" it showed Officer rights that nothing else gave; the id now
-        // shows the Member rights the member really had.)
-        var roles = await db.LinkshellRoles.AsNoTracking().Where(r => r.LinkshellId == Ls).ToListAsync();
-        var byName = new Dictionary<int, Dictionary<string, LinkshellRole>>
+        var byIdMap = new Dictionary<int, Dictionary<int, LinkshellRole>> { [Ls] = roles.ToDictionary(r => r.Id) };
+        var overview = LinkshellManagerDiscordApp.Controllers.ActivityMappers.ResolvePermissionsFor(
+            Ls, membership.LinkshellRoleId, byIdMap, adminOverrideActive: false);
+        Assert.NotNull(overview);
+        foreach (var flag in AllFlags)
         {
-            [Ls] = roles.ToDictionary(r => r.Name, StringComparer.OrdinalIgnoreCase),
+            var before = LinkshellRanks.IsLeader(rank) || flag(oldRole);
+            Assert.Equal(before, await permissions.CanAsync(membership, flag, CancellationToken.None));
+        }
+        // The overview shows the role the id names (the Leader rule is applied on top by its
+        // callers, as AnswersJoinRequests does).
+        if (!LinkshellRanks.IsLeader(rank))
+        {
+            Assert.Equal(oldRole.CanManageInvites, overview!.CanManageInvites);
+            Assert.Equal(oldRole.CanManageEvents, overview.CanManageEvents);
+            Assert.Equal(oldRole.CanBid, overview.CanBid);
+        }
+        Assert.Equal(
+            LinkshellRanks.IsLeader(rank) || oldRole.CanManageInvites,
+            LinkshellManagerDiscordApp.Controllers.ActivityMappers.AnswersJoinRequests(
+                Ls, membership.Rank, membership.LinkshellRoleId, byIdMap, adminOverrideActive: false));
+
+        // And the bid check gives what the rank gave before the save. (Bidding has no Leader
+        // rule: it reads the role's CanBid, and the Leader role can bid.)
+        Assert.Equal(oldCanBid, await AuctionBidService.CanMembershipBidAsync(db, membership, CancellationToken.None));
+    }
+
+    // A messy roster in one linkshell, all saved together: every member keeps exactly the rights the
+    // old name path gave their Rank, and nobody's id points outside the linkshell.
+    [Fact]
+    public async Task MessyRoster_EveryMemberKeepsTheirRights()
+    {
+        await using var db = NewDb();
+        db.Linkshells.Add(new Linkshell { Id = Ls, LinkshellName = "LS1", LootStructure = "Dkp" });
+        db.Linkshells.Add(new Linkshell { Id = OtherLs, LinkshellName = "LS2", LootStructure = "Dkp" });
+        db.LinkshellRoles.AddRange(LinkshellRoleDefaults.BuildDefaultRoles(Ls));
+        db.LinkshellRoles.AddRange(LinkshellRoleDefaults.BuildDefaultRoles(OtherLs));
+        db.LinkshellRoles.Add(new LinkshellRole { LinkshellId = Ls, Name = "Raid Lead", CanManageEvents = true, CanBid = false });
+        db.LinkshellRoles.Add(new LinkshellRole { LinkshellId = OtherLs, Name = "Banker", CanManageTreasury = true });
+        await db.SaveChangesAsync();
+        var allRoles = await db.LinkshellRoles.AsNoTracking().ToListAsync();
+
+        var ranks = new (int Linkshell, string? Rank)[]
+        {
+            (Ls, "Leader"), (Ls, "Officer"), (Ls, " Officer"), (Ls, "officer"), (Ls, "Raid Lead"), (Ls, "Banker"),
+            (Ls, "Trial"), (Ls, "Auctionner"), (Ls, null), (Ls, ""),
+            (OtherLs, "LEADER"), (OtherLs, "Banker"), (OtherLs, "Raid Lead"), (OtherLs, "Member"), (OtherLs, " Trial "),
         };
-        Assert.Equal(
-            LinkshellManagerDiscordApp.Controllers.ActivityMappers.ResolvePermissionsFor(Ls, byRank.Name, byName, adminOverrideActive: false),
-            LinkshellManagerDiscordApp.Controllers.ActivityMappers.ResolvePermissionsFor(Ls, rank, byName, adminOverrideActive: false, membership.LinkshellRoleId));
-        // And the bid check gives what the rank gave before the save.
-        Assert.Equal(
-            await AuctionBidService.CanRankBidAsync(db, Ls, rank, CancellationToken.None),
-            await AuctionBidService.CanMembershipBidAsync(db, membership, CancellationToken.None));
+        var members = new List<(AppUserLinkshell Membership, string? Rank)>();
+        for (var i = 0; i < ranks.Length; i++)
+        {
+            db.Users.Add(new AppUser { Id = $"u{i}", UserName = $"u{i}" });
+            var membership = new AppUserLinkshell { AppUserId = $"u{i}", LinkshellId = ranks[i].Linkshell, Rank = ranks[i].Rank };
+            db.AppUserLinkshells.Add(membership);
+            members.Add((membership, ranks[i].Rank));
+        }
+        await db.SaveChangesAsync();
+        var permissions = await NewServiceAsync(db);
+
+        foreach (var (membership, rank) in members)
+        {
+            var roles = allRoles.Where(r => r.LinkshellId == membership.LinkshellId).ToList();
+            var oldRole = OldRoleByRank(rank, roles);
+            Assert.Contains(roles, r => r.Id == membership.LinkshellRoleId);
+            foreach (var flag in AllFlags)
+            {
+                Assert.True(
+                    (LinkshellRanks.IsLeader(rank) || flag(oldRole)) == await permissions.CanAsync(membership, flag, CancellationToken.None),
+                    $"Rank {rank ?? "NULL"} in linkshell {membership.LinkshellId}");
+            }
+            Assert.Equal(OldCanRankBid(rank, roles), await AuctionBidService.CanMembershipBidAsync(db, membership, CancellationToken.None));
+        }
+    }
+
+    // The Rank text no longer picks the role. A member read with a Rank that does not match their
+    // id (only possible in memory, or by a hand edit in SQL: every save re-stamps Rank) gets the
+    // rights of the role their id names. "Leader" is the one exception: the Leader rule reads Rank.
+    [Fact]
+    public async Task StaleRankText_DoesNotPickTheRole()
+    {
+        await using var db = NewDb();
+        var membership = await SeedMemberAsync(db, UserId, LinkshellRanks.Member);
+        db.ChangeTracker.Clear();
+        membership.Rank = LinkshellRanks.Officer;
+        var permissions = await NewServiceAsync(db);
+
+        Assert.False(await permissions.CanAsync(membership, r => r.CanManageEvents, CancellationToken.None));
+        Assert.Equal(LinkshellRanks.Member, (await permissions.GetEffectiveRoleAsync(membership, CancellationToken.None))?.Name);
+    }
+
+    // No id, or an id that is none of the linkshell's roles (should never happen: the column is
+    // NOT NULL and the foreign key keeps it in the linkshell): Member rights, never the rights the
+    // Rank text names, and a warning in the log. The bid check does the same.
+    [Theory]
+    [InlineData(null)]
+    [InlineData(9999)]
+    public async Task MissingOrUnknownRoleId_GetsMemberRights_AndIsLogged(int? roleId)
+    {
+        var provider = new CapturingLoggerProvider();
+        using var logs = LoggerFactory.Create(builder => builder.AddProvider(provider));
+        await using var db = new ApplicationDbContext(new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .UseLoggerFactory(logs)
+            .Options);
+        db.Linkshells.Add(new Linkshell { Id = Ls, LinkshellName = "LS1", LootStructure = "Dkp" });
+        db.LinkshellRoles.AddRange(LinkshellRoleDefaults.BuildDefaultRoles(Ls));
+        await db.SaveChangesAsync();
+        db.LinkshellRoles.Single(r => r.Name == LinkshellRanks.Member).CanBid = false;
+        await db.SaveChangesAsync();
+        var membership = new AppUserLinkshell { Id = 77, AppUserId = UserId, LinkshellId = Ls, Rank = LinkshellRanks.Officer, LinkshellRoleId = roleId };
+        var permissions = await NewServiceAsync(db);
+
+        Assert.Equal(LinkshellRanks.Member, (await permissions.GetEffectiveRoleAsync(membership, CancellationToken.None))?.Name);
+        Assert.False(await permissions.CanAsync(membership, r => r.CanManageEvents, CancellationToken.None));
+        Assert.False(await AuctionBidService.CanMembershipBidAsync(db, membership, CancellationToken.None));
+
+        var warnings = provider.Entries
+            .Where(e => e.Category == typeof(LinkshellPermissions).FullName && e.Level == LogLevel.Warning)
+            .ToList();
+        Assert.Equal(3, warnings.Count);
+        Assert.All(warnings, w => Assert.Contains("Member role", w.Message, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Trial_CannotBid_Member_Can()
+    {
+        await using var db = NewDb();
+        var trial = await SeedMemberAsync(db, UserId, LinkshellRanks.Trial);
+        var member = await SeedMemberAsync(db, "user-2", LinkshellRanks.Member);
+
+        Assert.False(await AuctionBidService.CanMembershipBidAsync(db, trial, CancellationToken.None));
+        Assert.True(await AuctionBidService.CanMembershipBidAsync(db, member, CancellationToken.None));
+    }
+
+    // The deleted name path, kept here only as the yardstick for the parity tests above:
+    // LinkshellPermissions.GetEffectiveRoleAsync(rank, ...) -- the trimmed Rank's role, exact
+    // capitals, else Member -- and AuctionBidService.CanRankBidAsync -- that role's CanBid, true
+    // when the role was missing.
+    private static LinkshellRole OldRoleByRank(string? rank, List<LinkshellRole> roles)
+    {
+        var name = string.IsNullOrWhiteSpace(rank) ? LinkshellRanks.Member : rank.Trim();
+        return roles.FirstOrDefault(r => r.Name == name)
+            ?? roles.Single(r => r.Name == LinkshellRanks.Member);
+    }
+
+    private static bool OldCanRankBid(string? rank, List<LinkshellRole> roles)
+    {
+        var name = string.IsNullOrWhiteSpace(rank) ? LinkshellRanks.Member : rank.Trim();
+        return roles.FirstOrDefault(r => r.Name == name)?.CanBid != false;
     }
 
     // A custom role renamed (Data Admin edits only the role row): its holders keep it by id, so they
@@ -339,6 +480,51 @@ public class LinkshellPermissionsTests
         Assert.Contains("_permissions.GetMembershipAsync(", text);
         Assert.DoesNotContain("LinkshellRanks.IsLeader(", text);
         Assert.DoesNotContain("BuildDefaultRoles(", text);
+    }
+
+    private sealed record LogEntry(string Category, LogLevel Level, string Message);
+
+    // Collects what the context's logger factory is given (UseLoggerFactory), with its category.
+    private sealed class CapturingLoggerProvider : ILoggerProvider
+    {
+        private readonly object _gate = new();
+        private readonly List<LogEntry> _entries = new();
+
+        public IReadOnlyList<LogEntry> Entries
+        {
+            get
+            {
+                lock (_gate)
+                {
+                    return _entries.ToList();
+                }
+            }
+        }
+
+        public ILogger CreateLogger(string categoryName) => new CapturingLogger(this, categoryName);
+
+        public void Dispose()
+        {
+        }
+
+        private void Add(LogEntry entry)
+        {
+            lock (_gate)
+            {
+                _entries.Add(entry);
+            }
+        }
+
+        private sealed class CapturingLogger(CapturingLoggerProvider owner, string category) : ILogger
+        {
+            public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+            public bool IsEnabled(LogLevel logLevel) => true;
+
+            public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+                Func<TState, Exception?, string> formatter) =>
+                owner.Add(new LogEntry(category, logLevel, formatter(state, exception)));
+        }
     }
 
     private static string FindRepoPath(string relative)

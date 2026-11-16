@@ -215,11 +215,10 @@ public sealed partial class ActivityRosterController
             return BadRequest(new { error = "System roles cannot be deleted." });
         }
 
-        // By name, and by id: a member whose Rank has extra spaces (" Raider ") still holds the role
-        // (LinkshellRoleId), and the database refuses to delete a role anyone holds by id.
+        // By id only: the id is what holding a role means (LinkshellPermissions), Rank is just a copy
+        // of the role's name, and the database refuses to delete a role anyone holds by id.
         var inUse = await _dbContext.AppUserLinkshells
-            .AnyAsync(link => link.LinkshellId == linkshellId
-                && (link.Rank == role.Name || link.LinkshellRoleId == role.Id), cancellationToken);
+            .AnyAsync(link => link.LinkshellId == linkshellId && link.LinkshellRoleId == role.Id, cancellationToken);
         if (inUse)
         {
             return BadRequest(new { error = "Members still have this role. Reassign them first." });

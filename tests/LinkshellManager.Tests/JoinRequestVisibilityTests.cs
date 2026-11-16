@@ -4,6 +4,7 @@ using System.Linq;
 using LinkshellManagerDiscordApp.Controllers;
 using LinkshellManagerDiscordApp.Models;
 using LinkshellManagerDiscordApp.Services;
+using Microsoft.Extensions.Logging;
 using Xunit;
 
 namespace LinkshellManager.Tests;
@@ -11,117 +12,126 @@ namespace LinkshellManager.Tests;
 // Who the overview sends a linkshell's open join requests to. It must match who the approve and
 // deny routes let through ("Manage invites", the Leader always), so a plain member never sees a
 // player's name and note, and an officer never sees buttons that answer 403.
+//
+// Since R5.2 the overview reads the member's role by id only (AppUserLinkshell.LinkshellRoleId),
+// like LinkshellPermissions; the Rank text is read only for the Leader rule.
 public class JoinRequestVisibilityTests
 {
     private const int LinkshellId = 7;
 
-    private static Dictionary<int, Dictionary<string, LinkshellRole>> Roles(Action<List<LinkshellRole>>? change = null)
+    // The default roles with ids (100, 101, ...), keyed by id the way the overview builds its map.
+    private static Dictionary<int, Dictionary<int, LinkshellRole>> Roles(Action<List<LinkshellRole>>? change = null)
     {
         var roles = LinkshellRoleDefaults.BuildDefaultRoles(LinkshellId).ToList();
-        change?.Invoke(roles);
-        return new Dictionary<int, Dictionary<string, LinkshellRole>>
+        for (var i = 0; i < roles.Count; i++)
         {
-            [LinkshellId] = roles.ToDictionary(r => r.Name, StringComparer.OrdinalIgnoreCase),
+            roles[i].Id = 100 + i;
+        }
+        change?.Invoke(roles);
+        return new Dictionary<int, Dictionary<int, LinkshellRole>>
+        {
+            [LinkshellId] = roles.ToDictionary(r => r.Id),
         };
     }
+
+    private static int IdOf(Dictionary<int, Dictionary<int, LinkshellRole>> roles, string name)
+        => roles[LinkshellId].Values.Single(r => r.Name == name).Id;
+
+    // A member holding a role: the id names it and Rank is its name, as every save leaves them.
+    private static bool Sees(Dictionary<int, Dictionary<int, LinkshellRole>> roles, string role, bool adminOverrideActive = false)
+        => ActivityMappers.AnswersJoinRequests(LinkshellId, role, IdOf(roles, role), roles, adminOverrideActive);
 
     [Theory]
     [InlineData("Leader", true)]
     [InlineData("Officer", true)]
     [InlineData("Member", false)]
     [InlineData("Trial", false)]
-    [InlineData(null, false)]
-    [InlineData("Unknown custom role", false)] // falls back to Member
-    public void DefaultRoles(string? rank, bool sees)
-        => Assert.Equal(sees, ActivityMappers.AnswersJoinRequests(LinkshellId, rank, Roles(), adminOverrideActive: false));
+    public void DefaultRoles(string role, bool sees)
+        => Assert.Equal(sees, Sees(Roles(), role));
 
     [Fact]
     public void AnOfficerWithoutManageInvites_SeesNone()
     {
         var roles = Roles(list => list.Single(r => r.Name == LinkshellRanks.Officer).CanManageInvites = false);
-        Assert.False(ActivityMappers.AnswersJoinRequests(LinkshellId, "Officer", roles, adminOverrideActive: false));
+        Assert.False(Sees(roles, LinkshellRanks.Officer));
     }
 
     [Fact]
     public void ACustomRoleWithManageInvites_SeesThem()
     {
-        var roles = Roles(list => list.Add(new LinkshellRole { LinkshellId = LinkshellId, Name = "Recruiter", CanManageInvites = true }));
-        Assert.True(ActivityMappers.AnswersJoinRequests(LinkshellId, "Recruiter", roles, adminOverrideActive: false));
+        var roles = Roles(list => list.Add(new LinkshellRole { Id = 500, LinkshellId = LinkshellId, Name = "Recruiter", CanManageInvites = true }));
+        Assert.True(Sees(roles, "Recruiter"));
     }
 
     [Fact]
     public void TheLeader_SeesThemEvenIfTheirRoleRowLostTheFlag()
     {
         var roles = Roles(list => list.Single(r => r.Name == LinkshellRanks.Leader).CanManageInvites = false);
-        Assert.True(ActivityMappers.AnswersJoinRequests(LinkshellId, "Leader", roles, adminOverrideActive: false));
+        Assert.True(Sees(roles, LinkshellRanks.Leader));
     }
 
     [Fact]
     public void TheAdminOverride_SeesThem()
-        => Assert.True(ActivityMappers.AnswersJoinRequests(LinkshellId, "Member", Roles(), adminOverrideActive: true));
+        => Assert.True(Sees(Roles(), LinkshellRanks.Member, adminOverrideActive: true));
 
-    // ---- role id (RosterSwitch): the overview must read the role the same way enforcement does ----
-
-    // Default roles with ids, so a membership can point at one (AppUserLinkshell.LinkshellRoleId).
-    private static Dictionary<int, Dictionary<string, LinkshellRole>> RolesWithIds(Action<List<LinkshellRole>>? change = null)
-        => Roles(list =>
-        {
-            for (var i = 0; i < list.Count; i++)
-            {
-                list[i].Id = 100 + i;
-            }
-            change?.Invoke(list);
-        });
-
-    // For every default role, an id stamped from the Rank gives exactly the rank's answer.
-    [Theory]
-    [InlineData("Leader")]
-    [InlineData("Officer")]
-    [InlineData("Member")]
-    [InlineData("Trial")]
-    public void ARoleIdStampedFromTheRank_GivesTheSamePermissions(string rank)
-    {
-        var roles = RolesWithIds();
-        var roleId = roles[LinkshellId][rank].Id;
-
-        Assert.Equal(
-            ActivityMappers.ResolvePermissionsFor(LinkshellId, rank, roles, adminOverrideActive: false),
-            ActivityMappers.ResolvePermissionsFor(LinkshellId, rank, roles, adminOverrideActive: false, roleId));
-        Assert.Equal(
-            ActivityMappers.AnswersJoinRequests(LinkshellId, rank, roles, adminOverrideActive: false),
-            ActivityMappers.AnswersJoinRequests(LinkshellId, rank, roles, adminOverrideActive: false, roleId));
-    }
-
-    // A custom role renamed in Data Admin: the holder's Rank still says the old name, but their id
+    // A custom role renamed in Data Admin: whatever Rank text the member was read with, their id
     // still names the role, so the overview shows its rights, as LinkshellPermissions enforces.
     [Fact]
     public void ARenamedRole_KeepsItsHoldersRights_ByTheirRoleId()
     {
-        var roles = RolesWithIds(list => list.Add(
+        var roles = Roles(list => list.Add(
             new LinkshellRole { Id = 500, LinkshellId = LinkshellId, Name = "Greeter", CanManageInvites = true }));
 
-        Assert.False(ActivityMappers.AnswersJoinRequests(LinkshellId, "Recruiter", roles, adminOverrideActive: false));
-        Assert.True(ActivityMappers.AnswersJoinRequests(LinkshellId, "Recruiter", roles, adminOverrideActive: false, roleId: 500));
-        Assert.True(ActivityMappers.ResolvePermissionsFor(LinkshellId, "Recruiter", roles, adminOverrideActive: false, roleId: 500)?.CanManageInvites);
+        Assert.True(ActivityMappers.AnswersJoinRequests(LinkshellId, "Recruiter", 500, roles, adminOverrideActive: false));
+        Assert.True(ActivityMappers.ResolvePermissionsFor(LinkshellId, 500, roles, adminOverrideActive: false)?.CanManageInvites);
     }
 
-    // An id that is not one of this linkshell's roles is ignored: the rank decides, as before.
+    // The Rank text no longer picks the role: a member read with a stale "Officer" Rank whose id
+    // names Member gets Member's rights.
     [Fact]
-    public void ARoleIdThatIsNotThisLinkshells_FallsBackToTheRank()
+    public void TheRankText_DoesNotPickTheRole()
     {
-        var roles = RolesWithIds();
+        var roles = Roles();
+        Assert.False(ActivityMappers.AnswersJoinRequests(LinkshellId, LinkshellRanks.Officer, IdOf(roles, LinkshellRanks.Member), roles, adminOverrideActive: false));
+    }
 
-        Assert.True(ActivityMappers.AnswersJoinRequests(LinkshellId, "Officer", roles, adminOverrideActive: false, roleId: 9999));
-        Assert.False(ActivityMappers.AnswersJoinRequests(LinkshellId, "Member", roles, adminOverrideActive: false, roleId: 9999));
+    // An id that is none of this linkshell's roles, or no id at all (should never happen: the
+    // column is NOT NULL and the foreign key keeps it in the linkshell): the Member role's rights,
+    // never the rights the Rank text names, and a warning in the log.
+    [Theory]
+    [InlineData(9999)]
+    [InlineData(null)]
+    public void AnUnknownOrMissingRoleId_GetsMemberRights_AndIsLogged(int? roleId)
+    {
+        var roles = Roles();
+        var logger = new CapturingLogger();
+
+        var permissions = ActivityMappers.ResolvePermissionsFor(LinkshellId, roleId, roles, adminOverrideActive: false, logger);
+
+        Assert.Equal(ActivityMappers.ResolvePermissionsFor(LinkshellId, IdOf(roles, LinkshellRanks.Member), roles, adminOverrideActive: false), permissions);
+        Assert.False(ActivityMappers.AnswersJoinRequests(LinkshellId, LinkshellRanks.Officer, roleId, roles, adminOverrideActive: false));
+        var warning = Assert.Single(logger.Entries);
+        Assert.Equal(LogLevel.Warning, warning.Level);
+        Assert.Contains("Member role", warning.Message, StringComparison.Ordinal);
     }
 
     // The Leader rule still comes first, whatever role the id names.
     [Fact]
     public void TheLeader_SeesThem_EvenWhenTheirRoleIdNamesAPlainRole()
     {
-        var roles = RolesWithIds();
-        var memberRoleId = roles[LinkshellId][LinkshellRanks.Member].Id;
+        var roles = Roles();
+        Assert.True(ActivityMappers.AnswersJoinRequests(LinkshellId, LinkshellRanks.Leader, IdOf(roles, LinkshellRanks.Member), roles, adminOverrideActive: false));
+    }
 
-        Assert.True(ActivityMappers.AnswersJoinRequests(LinkshellId, "Leader", roles, adminOverrideActive: false, memberRoleId));
+    private sealed class CapturingLogger : ILogger
+    {
+        public List<(LogLevel Level, string Message)> Entries { get; } = new();
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+            Func<TState, Exception?, string> formatter) => Entries.Add((logLevel, formatter(state, exception)));
     }
 }

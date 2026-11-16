@@ -256,8 +256,9 @@ public class MembershipRoleStampTests : IAsyncLifetime
             await check.LinkshellRoles.CountAsync(r => r.LinkshellId == linkshellId));
     }
 
-    // The role delete checks holders by name AND by id: " Raider " holds Raider by id only, and
-    // without that the database would refuse the delete with an error instead of a message.
+    // The role delete checks holders by id (what holding a role means), so " Raider " (seeded with
+    // padding, holding Raider by id) is counted; otherwise the database would refuse the delete
+    // with an error instead of a message.
     [Fact]
     public async Task RoleDelete_IsRefusedWhileAnyoneHoldsIt_ThenWorks()
     {

@@ -227,8 +227,13 @@ public static class AuctionBidService
 
     private static AuctionBidResult Fail(string error) => new(false, error, null, 0);
 
-    // True if this member may place bids: the role their id names (see LinkshellPermissions),
-    // else what their rank gives (CanRankBidAsync below).
+    // True if this member may place bids: the CanBid of the role their id names (see
+    // LinkshellPermissions; Rank is not read). Only an explicit CanBid=false (e.g. the built-in
+    // Trial role) stops a bid.
+    //
+    // If the id names no role (should never happen: it is NOT NULL since MembershipRoleRequired),
+    // the Member role decides, with a warning in the log; and if even that is missing, the bid is
+    // allowed, as it always was for a role row that was never seeded.
     public static async Task<bool> CanMembershipBidAsync(
         ApplicationDbContext db, AppUserLinkshell membership, CancellationToken cancellationToken)
     {
@@ -243,21 +248,13 @@ public static class AuctionBidService
                 return canBid;
             }
         }
-        return await CanRankBidAsync(db, membership.LinkshellId, membership.Rank, cancellationToken);
-    }
 
-    // True if the given rank may place bids in the linkshell. Defaults to true when
-    // the role row is missing (legacy linkshells whose roles were never seeded) so
-    // bidding is never accidentally blocked — only an explicit CanBid=false (e.g.
-    // the built-in Trial role) stops it.
-    public static async Task<bool> CanRankBidAsync(
-        ApplicationDbContext db, int linkshellId, string? rank, CancellationToken cancellationToken)
-    {
-        var rankName = string.IsNullOrWhiteSpace(rank) ? LinkshellRanks.Member : rank.Trim();
-        var canBid = await db.LinkshellRoles
-            .Where(r => r.LinkshellId == linkshellId && r.Name == rankName)
+        LinkshellPermissions.LogRoleFallback(
+            LinkshellPermissions.LoggerFor(db), membership.LinkshellId, membership.LinkshellRoleId);
+        var memberCanBid = await db.LinkshellRoles
+            .Where(r => r.LinkshellId == membership.LinkshellId && r.Name == LinkshellRanks.Member)
             .Select(r => (bool?)r.CanBid)
             .FirstOrDefaultAsync(cancellationToken);
-        return canBid != false;
+        return memberCanBid != false;
     }
 }

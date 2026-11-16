@@ -8,7 +8,9 @@ using LinkshellManagerDiscordApp.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
 using Xunit;
 
@@ -172,14 +174,27 @@ public class MembershipRoleRequiredRoundTripTests
             await using (var db = SchemaTestDatabase.CreateContext(connectionString))
             {
                 Assert.Contains(MembershipRoleRequired, await db.Database.GetAppliedMigrationsAsync());
+                // The member with no role still loads (the EF model keeps the id optional for this),
+                // and permissions give it the Member role's rights: the missing built-in role is
+                // added, as a permission check always did for a linkshell missing one.
                 var loaded = await db.AppUserLinkshells.AsNoTracking().Where(m => m.LinkshellId == Ls).ToListAsync();
-                Assert.Null(loaded.Single(m => m.Rank == "Nobody").LinkshellRoleId);
+                var nobody = loaded.Single(m => m.Rank == "Nobody");
+                Assert.Null(nobody.LinkshellRoleId);
+                var settings = new GlobalSettingsService(db, new MemoryCache(new MemoryCacheOptions()));
+                var permissions = new LinkshellPermissions(
+                    db, new AdminOverrideService(db, settings, NullLogger<AdminOverrideService>.Instance));
+                Assert.Equal(LinkshellRanks.Member, (await permissions.GetEffectiveRoleAsync(nobody, default))?.Name);
+                Assert.False(await permissions.CanAsync(nobody, r => r.CanManageEvents, default));
             }
 
+            // Down and Up again. The check above added the missing Member role, so this time the
+            // member gets it and NOT NULL goes in: fixing the cause and re-running is the cure.
             await MigrateAsync(connectionString, Before);
             Assert.True(await IsNullableAsync(connectionString));
-            await MigrateAsync(connectionString, MembershipRoleRequired);
-            Assert.True(await IsNullableAsync(connectionString));
+            var again = await MigrateAsync(connectionString, MembershipRoleRequired);
+            Assert.Contains("Postgres NOTICE during migration: MembershipRoleRequired: 1 membership(s) given the Member role.", again);
+            Assert.False(await IsNullableAsync(connectionString));
+            Assert.Equal(LinkshellRanks.Member, (await MembersAsync(connectionString)).Single(m => m.Dkp == 1).Rank);
         }
         finally
         {

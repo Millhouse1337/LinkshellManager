@@ -83,9 +83,9 @@ public sealed partial class ActivityOverviewController
         var revenueTotals = await _treasury.GetCashOnHandByLinkshellAsync(linkshellIds, cancellationToken);
 
         var rolesByLinkshell = await EnsureDefaultRolesForLinkshellsAsync(linkshellIds, cancellationToken);
-        var rolesByLinkshellAndName = rolesByLinkshell.ToDictionary(
+        var rolesByLinkshellAndId = rolesByLinkshell.ToDictionary(
             kvp => kvp.Key,
-            kvp => kvp.Value.ToDictionary(r => r.Name, StringComparer.OrdinalIgnoreCase));
+            kvp => kvp.Value.ToDictionary(r => r.Id));
 
         // Cap is generous because this list feeds both the Live ops panel and the
         // Pending Events queue in one fetch — splitting at 8 was clipping queued
@@ -621,7 +621,7 @@ public sealed partial class ActivityOverviewController
 
         // Join requests go only to those who may answer them. A plain member sees none.
         var answersJoinRequestsIn = linkshellMemberships
-            .Where(link => AnswersJoinRequests(link.LinkshellId, link.Rank, rolesByLinkshellAndName, adminOverrideActive, link.LinkshellRoleId))
+            .Where(link => AnswersJoinRequests(link.LinkshellId, link.Rank, link.LinkshellRoleId, rolesByLinkshellAndId, adminOverrideActive, _logger))
             .Select(link => link.LinkshellId)
             .ToHashSet();
 
@@ -831,7 +831,7 @@ public sealed partial class ActivityOverviewController
                 itemCounts.GetValueOrDefault(link.LinkshellId, 0),
                 revenueTotals.GetValueOrDefault(link.LinkshellId, 0L),
                 link.Linkshell?.Details,
-                ResolvePermissionsFor(link.LinkshellId, link.Rank, rolesByLinkshellAndName, adminOverrideActive, link.LinkshellRoleId),
+                ResolvePermissionsFor(link.LinkshellId, link.LinkshellRoleId, rolesByLinkshellAndId, adminOverrideActive, _logger),
                 MapLinkshellSettingsDto(
                     link.Linkshell,
                     MonsterSetupsFor(

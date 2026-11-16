@@ -16,16 +16,16 @@ namespace LinkshellManagerDiscordApp.Services;
 //   1. no membership                    -> false  (never grant inside a linkshell the user has not joined)
 //   2. super-admin override is active   -> true   (AdminOverrideService; only AFTER the membership check)
 //   3. rank is Leader                   -> true   (a stale or mis-edited role row must never lock the owner out)
-//   4. the member's role decides: the one their role id names (AppUserLinkshell.LinkshellRoleId),
-//      else the one their rank names; an unknown rank falls back to the Member role
+//   4. the member's role decides: the one their role id names (AppUserLinkshell.LinkshellRoleId)
 //
-// Role id vs rank: the id is the source, and every save keeps Rank a copy of that role's name
-// (ApplicationDbContext.StampMembershipRoles). A save that sets only Rank is given the role this
-// file would pick for that Rank (exact trimmed name, else Leader for "leader" in any capitals,
-// else Member; MembershipRoleMatch), so both give the same role for every member. They only part
-// when a role is renamed straight in its table: the holders keep the id, so they keep the role's
-// rights. A NULL id (a row no save has touched since the id existed) still means "look it up by
-// name"; a later deploy makes the id required and drops the name fallback.
+// Role id vs rank: the id is the source, and the only thing step 4 reads. Every save keeps Rank a
+// copy of that role's name (ApplicationDbContext.StampMembershipRoles), so the Leader rule in step
+// 3 means the same thing. A save that sets only Rank is given the role that Rank names (exact
+// trimmed name, else Leader for "leader" in any capitals, else Member; MembershipRoleMatch).
+// The id is NOT NULL in the database (MembershipRoleRequired). If a member still had no id, or an
+// id that is none of their linkshell's roles, they get the Member role's rights and a warning is
+// logged; that should never happen. (Rank used to be the fallback here; it no longer decides
+// anything but the Leader rule.)
 //
 // What this does NOT do: the per-linkshell Discord guild lock. That needs the request's
 // Discord bearer token and guild header, so it stays in ActivityControllerBase, which
@@ -109,12 +109,11 @@ public sealed class LinkshellPermissions
     }
 
     // The role a member holds: the role their id names (always one of their own linkshell's: the
-    // foreign key is on (LinkshellId, LinkshellRoleId)), else the one their rank names.
+    // foreign key is on (LinkshellId, LinkshellRoleId)). Rank is not read.
     public async Task<LinkshellRole?> GetEffectiveRoleAsync(AppUserLinkshell membership, CancellationToken ct)
     {
         if (membership.LinkshellRoleId is int roleId)
         {
-            await EnsureDefaultRolesAsync(membership.LinkshellId, ct);
             var held = await _dbContext.LinkshellRoles
                 .AsNoTracking()
                 .FirstOrDefaultAsync(r => r.LinkshellId == membership.LinkshellId && r.Id == roleId, ct);
@@ -123,26 +122,40 @@ public sealed class LinkshellPermissions
                 return held;
             }
         }
-        return await GetEffectiveRoleAsync(membership.Rank, membership.LinkshellId, ct);
+
+        // Should never happen: the id is NOT NULL and the foreign key keeps it one of this
+        // linkshell's roles. Member rights, never more, and a warning so it gets noticed.
+        LogRoleFallback(LoggerFor(_dbContext), membership.LinkshellId, membership.LinkshellRoleId);
+        return MemberRoleOf(await EnsureDefaultRolesAsync(membership.LinkshellId, ct));
     }
 
-    // The role row a rank maps to. A blank rank means Member; a rank with no matching
-    // role (deleted or renamed custom role) falls back to the Member role, so the member
-    // keeps member rights instead of getting none — or more.
-    public async Task<LinkshellRole?> GetEffectiveRoleAsync(string? rank, int linkshellId, CancellationToken ct)
+    // The Member role among one linkshell's roles: what a member whose role id names no role gets.
+    internal static LinkshellRole? MemberRoleOf(IEnumerable<LinkshellRole> roles) =>
+        roles.FirstOrDefault(r => string.Equals(r.Name, LinkshellRanks.Member, StringComparison.Ordinal));
+
+    // The one warning for "this member's role id names no role" (LinkshellPermissions,
+    // AuctionBidService, the Activity overview all fall back to Member and log this).
+    internal static void LogRoleFallback(ILogger? logger, int linkshellId, int? roleId) =>
+        logger?.LogWarning(
+            "A member of linkshell {LinkshellId} has role id {RoleId}, which is none of that linkshell's roles, " +
+            "so they get the Member role's rights. This should never happen (LinkshellRoleId is NOT NULL since " +
+            "MembershipRoleRequired); run pre-check C1/C3.",
+            linkshellId, roleId?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "NULL");
+
+    // The app's logger, through the context (as ApplicationDbContext's own warnings do). A context
+    // built without one (some tests) logs nothing: logging must never fail a permission check.
+    internal static ILogger? LoggerFor(DbContext db)
     {
-        await EnsureDefaultRolesAsync(linkshellId, ct);
-        var rankName = string.IsNullOrWhiteSpace(rank) ? LinkshellRanks.Member : rank.Trim();
-        var role = await _dbContext.LinkshellRoles
-            .AsNoTracking()
-            .FirstOrDefaultAsync(r => r.LinkshellId == linkshellId && r.Name == rankName, ct);
-        if (role is null)
+        try
         {
-            role = await _dbContext.LinkshellRoles
-                .AsNoTracking()
-                .FirstOrDefaultAsync(r => r.LinkshellId == linkshellId && r.Name == LinkshellRanks.Member, ct);
+            return Microsoft.EntityFrameworkCore.Infrastructure.AccessorExtensions
+                .GetService<ILoggerFactory>(db)
+                .CreateLogger(typeof(LinkshellPermissions).FullName!);
         }
-        return role;
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
     }
 
     public async Task<List<LinkshellRole>> EnsureDefaultRolesAsync(int linkshellId, CancellationToken ct)

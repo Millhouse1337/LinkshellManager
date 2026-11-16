@@ -5,15 +5,16 @@ namespace LinkshellManagerDiscordApp.Services;
 // Which role a membership's Rank names. The save hook (ApplicationDbContext.StampMembershipRoles)
 // uses it when a writer set Rank but no role id.
 //
-// It gives the role LinkshellPermissions would give the same Rank, so a member's rights never
-// change; only the Rank text may (it becomes the role's exact name):
+// It gives the role the old name rule of LinkshellPermissions gave the same Rank (permissions read
+// only the role id since R5.2), so a member's rights never change; only the Rank text may (it
+// becomes the role's exact name):
 //   1. the role of the member's own linkshell whose Name equals the trimmed Rank, case mattering
-//      (the rule GetEffectiveRoleAsync uses to find a role by name);
+//      (the old name rule; MembershipRoleRequired filled empty ids with the same three steps);
 //   2. else, a Rank that is "leader" in any capitals: the Leader role. Permissions treat such a
 //      Rank as the Leader (LinkshellRanks.IsLeader), so turning it into Member would lock the owner
 //      out;
 //   3. else -- a blank Rank, a Rank that names no role, one that only matches with different
-//      capitals -- the Member role, which is what permissions fall back to for such a Rank.
+//      capitals -- the Member role, which is what the old name rule fell back to for such a Rank.
 public static class MembershipRoleMatch
 {
     // The role name a Rank asks for: trimmed, or null when it is blank.
