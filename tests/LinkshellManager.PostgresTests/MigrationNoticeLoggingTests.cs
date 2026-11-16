@@ -172,9 +172,11 @@ public class MigrationNoticeLoggingTests
         }
     }
 
-    private sealed record LogEntry(LogLevel Level, string Message);
+    // Internal so other migration tests (MembershipRoleRequiredRoundTripTests) can check a notice's
+    // level, not only its text.
+    internal sealed record LogEntry(LogLevel Level, string Message);
 
-    private sealed class CapturingLogger : ILogger
+    internal sealed class CapturingLogger : ILogger
     {
         private readonly object _gate = new();
         private readonly List<LogEntry> _entries = new();

@@ -44,9 +44,11 @@ public class AppUserLinkshell
     //   - set the id (or Role), and Rank becomes that role's Name;
     //   - set only Rank, and the id becomes the role whose Name equals the trimmed Rank exactly
     //     (case matters). A Rank that names no role gets the Member role, and Rank says "Member".
-    // Still nullable; a later deploy makes it required. Permissions read this id first and fall
-    // back to the Rank name. The foreign key is on (LinkshellId, LinkshellRoleId), so a member can
-    // never hold another linkshell's role.
+    // Required in the database (MembershipRoleRequired), and permissions read this id only. It
+    // stays int?, and optional in the EF model, on purpose: a save may set only Rank and let the
+    // hook fill the id in, and a row left NULL by a skipped guard must still load (see the
+    // relationship in ApplicationDbContext). The foreign key is on (LinkshellId, LinkshellRoleId),
+    // so a member can never hold another linkshell's role.
     public int? LinkshellRoleId { get; set; }
 
     // The role row LinkshellRoleId names (the same two-column foreign key). It lets one save add a

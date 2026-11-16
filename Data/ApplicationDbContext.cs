@@ -1759,6 +1759,13 @@ namespace LinkshellManagerDiscordApp.Data
                 // only checks at the end of that statement. Deleting a role someone still holds
                 // is refused. The Role navigation is model-only (no schema change): the save hook
                 // uses it to link a member to a role added in the same save (StampMembershipRoles).
+                //
+                // The column is NOT NULL in the database (MembershipRoleRequired), but the model
+                // keeps it optional ON PURPOSE. That migration's NOT NULL is guarded: if it ever had
+                // to skip (a member left with no role), a required model would make every query that
+                // loads that member throw ("Column 'LinkshellRoleId' is null"), so whole pages would
+                // fail. Optional, the row still loads and LinkshellPermissions gives it the Member
+                // role with a warning. MembershipRoleRequiredRoundTripTests checks both.
                 entity.HasOne(item => item.Role)
                     .WithMany()
                     .HasForeignKey(item => new { item.LinkshellId, item.LinkshellRoleId })

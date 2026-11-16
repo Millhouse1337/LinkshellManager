@@ -84,7 +84,7 @@ column	AppUserLinkshells.DkpSeedLedgerId	integer NOT NULL
 column	AppUserLinkshells.Id	integer NOT NULL IDENTITY BY DEFAULT
 column	AppUserLinkshells.LinkshellDkp	double precision
 column	AppUserLinkshells.LinkshellId	integer NOT NULL
-column	AppUserLinkshells.LinkshellRoleId	integer
+column	AppUserLinkshells.LinkshellRoleId	integer NOT NULL
 column	AppUserLinkshells.ManualAbsentStreak	integer
 column	AppUserLinkshells.ManualActiveCreditStreak	integer
 column	AppUserLinkshells.ManualStreakSetAt	timestamp with time zone
@@ -825,6 +825,7 @@ constraint	"AppUserLinkshells".AppUserLinkshells_DkpPoolLedgerFromId_not_null	NO
 constraint	"AppUserLinkshells".AppUserLinkshells_DkpSeedLedgerId_not_null	NOT NULL "DkpSeedLedgerId"
 constraint	"AppUserLinkshells".AppUserLinkshells_Id_not_null	NOT NULL "Id"
 constraint	"AppUserLinkshells".AppUserLinkshells_LinkshellId_not_null	NOT NULL "LinkshellId"
+constraint	"AppUserLinkshells".AppUserLinkshells_LinkshellRoleId_not_null	NOT NULL "LinkshellRoleId"
 constraint	"AppUserLinkshells".AppUserLinkshells_SeededDkpEarned_not_null	NOT NULL "SeededDkpEarned"
 constraint	"AppUserLinkshells".AppUserLinkshells_SeededDkpSpent_not_null	NOT NULL "SeededDkpSpent"
 constraint	"AppUserLinkshells".FK_AppUserLinkshells_AspNetUsers_AppUserId	FOREIGN KEY ("AppUserId") REFERENCES "AspNetUsers"("Id")
