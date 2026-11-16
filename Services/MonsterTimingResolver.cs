@@ -35,27 +35,39 @@ public readonly record struct MonsterTiming(
 // A linkshell's whole monster catalog, resolved once and reused.
 public sealed class MonsterTimingMap
 {
-    private readonly Dictionary<string, MonsterTiming> _byAlias;
+    private readonly Dictionary<string, MonsterTiming> _bySpawnKey;
 
     public MonsterTimingMap(int linkshellId, IReadOnlyList<LinkshellMonsterTiming> rows)
     {
         LinkshellId = linkshellId;
         Rows = rows;
 
-        _byAlias = new Dictionary<string, MonsterTiming>(StringComparer.OrdinalIgnoreCase);
+        _bySpawnKey = new Dictionary<string, MonsterTiming>(StringComparer.Ordinal);
         foreach (var row in rows)
         {
-            var timing = ToTiming(row);
-            // Index EVERY spelling that refers to this spawn, so a caller holding "Fafnir",
-            // "Nidhogg" or the combined label lands on the one row. Same semantics as
-            // HnmRecurringBoardService.FindAsync, resolved once here instead of per call.
-            foreach (var alias in HnmConfig.MonsterMatchNames(row.MonsterName))
+            // Indexed by SPAWN KEY (HnmConfig.SpawnKey), so a caller holding "Fafnir", "Nidhogg" or
+            // the combined label lands on the one row. Same rule as HnmRecurringBoardService.FindAsync.
+            // Worked out from the name rather than read from row.SpawnKey, so a row that has not
+            // been saved yet (the editor's own rows) is indexed the same way.
+            if (HnmConfig.SpawnKey(row.MonsterName) is { } key)
             {
-                // First row wins. The editor rejects two rows claiming one spawn, so this only
-                // matters for data that predates it — and losing the later row beats throwing.
-                _byAlias.TryAdd(alias, timing);
+                // First row wins. The unique index (CampSpawnKeySwitch) and the editor refuse two
+                // rows for one spawn, so this only matters for data that predates them — and losing
+                // the later row beats throwing.
+                _bySpawnKey.TryAdd(key, ToTiming(row));
             }
         }
+    }
+
+    // The row for this name's spawn, if the linkshell has one.
+    private bool TryFind(string? monsterName, out MonsterTiming timing)
+    {
+        if (HnmConfig.SpawnKey(monsterName) is { } key && _bySpawnKey.TryGetValue(key, out timing))
+        {
+            return true;
+        }
+        timing = default;
+        return false;
     }
 
     public int LinkshellId { get; }
@@ -70,12 +82,7 @@ public sealed class MonsterTimingMap
     // this linkshell was seeded) resolves to its built-in default.
     public MonsterTiming For(string? monsterName)
     {
-        if (!string.IsNullOrWhiteSpace(monsterName)
-            && _byAlias.TryGetValue(monsterName.Trim(), out var found))
-        {
-            return found;
-        }
-        return FromDefaults(monsterName);
+        return TryFind(monsterName, out var found) ? found : FromDefaults(monsterName);
     }
 
     // The monster options for the create-event and Log ToD pickers. The rows are already stored in
@@ -108,21 +115,21 @@ public sealed class MonsterTimingMap
             return true;
         }
 
-        // Against the ALIAS index, not EventMonsterOptions. Merge pairs are stored as one combined
-        // row ("Fafnir/Nidhogg"), so the picker's own labels are combined too — a plain Contains
-        // over them would reject the perfectly valid "Fafnir" that every existing party setup,
-        // channel route and Discord board already holds. _byAlias indexes both halves and the
-        // combined label, which is exactly the question being asked here.
-        if (_byAlias.ContainsKey(trimmed))
+        // Against the SPAWN KEY index, not EventMonsterOptions. Merge pairs are stored as one
+        // combined row ("Fafnir/Nidhogg"), so the picker's own labels are combined too — a plain
+        // Contains over them would reject the perfectly valid "Fafnir" that every existing party
+        // setup, channel route and Discord board already holds. Both halves and the combined label
+        // give the same key, which is exactly the question being asked here.
+        if (TryFind(trimmed, out _))
         {
             return true;
         }
 
         // Unseeded: no rows to index, so fall back to the built-in catalog the picker is showing,
-        // expanded the same way so "Fafnir" matches its combined "Fafnir/Nidhogg" label there too.
+        // compared the same way so "Fafnir" matches its combined "Fafnir/Nidhogg" label there too.
+        var key = HnmConfig.SpawnKey(trimmed);
         return !IsSeeded
-            && EventMonsterOptions.Any(option =>
-                HnmConfig.MonsterMatchNames(option).Contains(trimmed, StringComparer.OrdinalIgnoreCase));
+            && EventMonsterOptions.Any(option => HnmConfig.SpawnKey(option) == key);
     }
 
     public static MonsterTiming FromDefaults(string? monsterName)

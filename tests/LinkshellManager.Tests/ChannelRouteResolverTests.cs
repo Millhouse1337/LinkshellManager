@@ -59,6 +59,11 @@ public class ChannelRouteResolverTests
     [InlineData("Fafnir/Nidhogg", "Fafnir")]
     [InlineData("Fafnir/Nidhogg", "Nidhogg")]
     [InlineData("Fafnir", "Fafnir/Nidhogg")]
+    [InlineData("Fafnir", "Nidhogg")]
+    [InlineData("Nidhogg", "Fafnir")]
+    [InlineData(" fafnir ", "NIDHOGG")]
+    [InlineData("King Behemoth", "Behemoth")]
+    [InlineData("Aspidochelone", "Adamantoise/Aspidochelone")]
     [InlineData("Behemoth/King Behemoth", "Behemoth/King Behemoth")]
     [InlineData("Adamantoise/Aspidochelone", "Adamantoise/Aspidochelone")]
     public async Task Merge_pair_camp_finds_its_route_under_any_spelling(string routeFilter, string campMonster)
@@ -96,6 +101,53 @@ public class ChannelRouteResolverTests
             .ResolveEventChannelIdAsync(1, "HNM", "Behemoth/King Behemoth", CancellationToken.None);
 
         Assert.Null(channel);
+    }
+
+    // A route with no monster filter still catches every HNM that no filtered route takes, while
+    // each filtered route takes its own spawn under any spelling, in both directions.
+    [Theory]
+    [InlineData("Nidhogg", "wyrms")]
+    [InlineData("Fafnir", "wyrms")]
+    [InlineData("Fafnir/Nidhogg", "wyrms")]
+    [InlineData("King Behemoth", "behes")]
+    [InlineData("Behemoth/King Behemoth", "behes")]
+    [InlineData("Tiamat", "hnm")]
+    [InlineData("Aspidochelone", "hnm")]
+    [InlineData("Some Custom NM", "hnm")]
+    // Decision 5: a custom combined name is one spawn of its own, so a half of it is not it.
+    [InlineData("Foo", "hnm")]
+    [InlineData("foo/bar", "custom")]
+    public async Task Filtered_routes_take_their_spawn_and_the_unfiltered_route_takes_the_rest(string campMonster, string expected)
+    {
+        var db = new ApplicationDbContext(new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options);
+        db.LinkshellChannelRoutes.AddRange(
+            new LinkshellChannelRoute
+            {
+                Id = 1, LinkshellId = 1, ChannelId = "hnm", PostEvents = true, EventTypeFilter = "HNM",
+            },
+            new LinkshellChannelRoute
+            {
+                Id = 2, LinkshellId = 1, ChannelId = "wyrms", PostEvents = true,
+                EventTypeFilter = "HNM", HnmMonsterFilter = "Fafnir/Nidhogg",
+            },
+            new LinkshellChannelRoute
+            {
+                Id = 3, LinkshellId = 1, ChannelId = "behes", PostEvents = true,
+                EventTypeFilter = "HNM", HnmMonsterFilter = "Behemoth",
+            },
+            new LinkshellChannelRoute
+            {
+                Id = 4, LinkshellId = 1, ChannelId = "custom", PostEvents = true,
+                EventTypeFilter = "HNM", HnmMonsterFilter = "Foo/Bar",
+            });
+        db.SaveChanges();
+
+        var channel = await new ChannelRouteResolver(db)
+            .ResolveEventChannelIdAsync(1, "HNM", campMonster, CancellationToken.None);
+
+        Assert.Equal(expected, channel);
     }
 
     [Fact]

@@ -207,7 +207,7 @@ public class MonsterTimingTests
 
     // ---- Resolver ----
 
-    // The whole point of routing lookups through HnmConfig.MonsterMatchNames: a caller holding any
+    // The whole point of looking rows up by spawn key (HnmConfig.SpawnKey): a caller holding any
     // spelling of a merged pair lands on the same row. A board stores the combined label, a ToD
     // logged before the pairs were merged holds a bare half, and both must resolve.
     [Theory]
@@ -215,6 +215,8 @@ public class MonsterTimingTests
     [InlineData("Nidhogg")]
     [InlineData("Fafnir/Nidhogg")]
     [InlineData("fafnir/nidhogg")]
+    [InlineData(" NIDHOGG ")]
+    [InlineData("Nidhogg/Fafnir")]
     public async Task Resolver_ResolvesEverySpellingOfAMergedPair(string spelling)
     {
         await using var db = await SeededAsync();
@@ -224,6 +226,47 @@ public class MonsterTimingTests
         Assert.Equal("Fafnir/Nidhogg", timing.MonsterName);
         Assert.Equal(7, timing.WindowCount);
         Assert.Equal(10, timing.WindowCadenceMinutes);
+        Assert.True(map.Allows(spelling));
+    }
+
+    // The same row for all three spellings of every merge pair. (A linkshell that never opened the
+    // editor is allowed all three too, from the built-in catalog.)
+    [Theory]
+    [InlineData("Adamantoise", "Aspidochelone")]
+    [InlineData("Behemoth", "King Behemoth")]
+    [InlineData("Fafnir", "Nidhogg")]
+    public async Task Resolver_GivesOneAnswer_ForAllThreeSpellings(string baseName, string stronger)
+    {
+        var spellings = new[] { baseName, stronger, $"{baseName}/{stronger}" };
+        await using var seeded = await SeededAsync();
+        var map = await new MonsterTimingResolver(seeded).GetMapAsync(LinkshellId, CancellationToken.None);
+        var answer = Assert.Single(spellings.Select(map.For).Distinct());
+        Assert.Equal($"{baseName}/{stronger}", answer.MonsterName);
+        Assert.All(spellings, name => Assert.True(map.Allows(name)));
+
+        await using var unseeded = NewInMemoryContext();
+        var defaults = await new MonsterTimingResolver(unseeded).GetMapAsync(LinkshellId, CancellationToken.None);
+        Assert.All(spellings, name => Assert.True(defaults.Allows(name)));
+        Assert.False(defaults.Allows("Not A Monster"));
+    }
+
+    // A custom combined name is one spawn of its own (decision 5): its halves are not it.
+    [Fact]
+    public async Task Resolver_ACustomCombinedRow_IsNotFoundByOneHalf()
+    {
+        await using var db = await SeededAsync();
+        db.LinkshellMonsterTimings.Add(new LinkshellMonsterTiming
+        {
+            LinkshellId = LinkshellId, MonsterName = "Foo/Bar", NormalizedMonsterName = "foo/bar", IsCustom = true,
+            CooldownMinutes = 77, CreatedAtUtc = Now, UpdatedAtUtc = Now,
+        });
+        await db.SaveChangesAsync();
+        var map = await new MonsterTimingResolver(db).GetMapAsync(LinkshellId, CancellationToken.None);
+
+        Assert.Equal(77, map.For(" foo/BAR ").CooldownMinutes);
+        Assert.True(map.Allows("foo/bar"));
+        Assert.NotEqual(77, map.For("Foo").CooldownMinutes);
+        Assert.False(map.Allows("Foo"));
     }
 
     // An un-seeded linkshell must behave EXACTLY as the app did before this table existed — that is
@@ -302,18 +345,52 @@ public class MonsterTimingTests
         Assert.Equal(48 * 60, saved.CooldownMinutes);
     }
 
-    // Two rows must never claim one spawn. The unique index can't catch this — the names differ —
-    // so the editor has to.
-    [Fact]
-    public async Task Editor_RejectsTwoRowsForOneSpawn()
+    // Two rows must never claim one spawn. The names differ, but the spawn key is the same, and the
+    // unique SpawnKey index would refuse the save — so the editor says so first, with a message.
+    [Theory]
+    [InlineData("Nidhogg")]
+    [InlineData("fafnir")]
+    [InlineData("Nidhogg/Fafnir")]
+    public async Task Editor_RejectsTwoRowsForOneSpawn(string added)
     {
         await using var db = await SeededAsync();
         var edits = await CurrentEditsAsync(db);
+        edits.Add(new MonsterTimingEdit(null, added, 7, 10, "mins", 22, "hours", "HNMs"));
+
+        var error = await NewEditor(db).SaveAsync(LinkshellId, edits, CancellationToken.None);
+        Assert.NotNull(error);
+        Assert.Contains("same spawn", error);
+    }
+
+    // A built-in row keeps its own name whatever the client sends, so the check goes by the name it
+    // is saved under. Renaming the built-in "Fafnir/Nidhogg" in the request does not free its spawn
+    // for a custom "Nidhogg" row (before, the check passed and the save wrote a second row).
+    [Fact]
+    public async Task Editor_RejectsASecondRowForABuiltInsSpawn_EvenWhenTheRequestRenamesTheBuiltIn()
+    {
+        await using var db = await SeededAsync();
+        var edits = await CurrentEditsAsync(db);
+        var pair = edits.Single(e => e.MonsterName == "Fafnir/Nidhogg");
+        edits[edits.IndexOf(pair)] = pair with { MonsterName = "Not Tiamat" };
         edits.Add(new MonsterTimingEdit(null, "Nidhogg", 7, 10, "mins", 22, "hours", "HNMs"));
 
         var error = await NewEditor(db).SaveAsync(LinkshellId, edits, CancellationToken.None);
         Assert.NotNull(error);
         Assert.Contains("same spawn", error);
+        Assert.Equal(1, await db.LinkshellMonsterTimings.CountAsync(r => r.SpawnKey == "fafnir/nidhogg"));
+    }
+
+    // A custom combined name is its own spawn (decision 5), so it may sit beside one of its halves.
+    [Fact]
+    public async Task Editor_AllowsACustomCombinedRow_BesideOneOfItsHalves()
+    {
+        await using var db = await SeededAsync();
+        var edits = await CurrentEditsAsync(db);
+        edits.Add(new MonsterTimingEdit(null, "Homebrew", null, null, "mins", 6, "hours", "Other NMs"));
+        edits.Add(new MonsterTimingEdit(null, "Homebrew/Other", null, null, "mins", 6, "hours", "Other NMs"));
+
+        Assert.Null(await NewEditor(db).SaveAsync(LinkshellId, edits, CancellationToken.None));
+        Assert.Equal(2, await db.LinkshellMonsterTimings.CountAsync(r => r.IsCustom));
     }
 
     // Pop-only mobs come from an item, not a repop timer, so they have no cooldown to configure.

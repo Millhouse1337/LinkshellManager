@@ -75,14 +75,15 @@ public sealed class ChannelRouteResolver
         // posted every HNM camp with no route of its own into a channel that had HNM unticked.)
         if (string.Equals(matchType, "HNM", StringComparison.OrdinalIgnoreCase))
         {
-            // Every spelling of the same spawn on BOTH sides. The route editor stores the merged
-            // catalog label ("Fafnir/Nidhogg"), older routes hold a single half ("Fafnir"), and a
-            // camp can carry either. Comparing the camp's halves against the filter's tokens as-is
-            // never matched a combined token, so the three merge-pair boards posted nowhere.
-            var monsterNames = HnmConfig.MonsterMatchNames(monsterName);
+            // Compared by SPAWN KEY on both sides. The route editor stores the merged catalog label
+            // ("Fafnir/Nidhogg"), older routes hold a single half ("Fafnir"), and a camp can carry
+            // either; all three give one key. Comparing the camp's halves against the filter's
+            // tokens as-is never matched a combined token, so the three merge-pair boards posted
+            // nowhere.
+            var spawnKey = HnmConfig.SpawnKey(monsterName);
             var hnmRoutes = rows.Where(route => FilterContains(route.EventTypeFilter, "HNM")).ToList();
-            var hnmMatch = monsterNames.Count > 0
-                ? hnmRoutes.FirstOrDefault(route => FilterMatchesMonster(route.HnmMonsterFilter, monsterNames))
+            var hnmMatch = spawnKey is not null
+                ? hnmRoutes.FirstOrDefault(route => FilterMatchesMonster(route.HnmMonsterFilter, spawnKey))
                 : null;
             hnmMatch ??= hnmRoutes.FirstOrDefault(route => string.IsNullOrWhiteSpace(route.HnmMonsterFilter));
             return string.IsNullOrEmpty(hnmMatch?.ChannelId) ? null : hnmMatch!.ChannelId;
@@ -93,7 +94,8 @@ public sealed class ChannelRouteResolver
     }
 
     // True when any monster in the pipe-delimited filter is the same spawn as the camp's monster.
-    private static bool FilterMatchesMonster(string? filter, IReadOnlyCollection<string> monsterNames)
+    // Compared in memory: the filter is a '|' list of names, so it has no key column of its own.
+    private static bool FilterMatchesMonster(string? filter, string spawnKey)
     {
         if (string.IsNullOrWhiteSpace(filter))
         {
@@ -101,8 +103,7 @@ public sealed class ChannelRouteResolver
         }
         return filter
             .Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Any(token => HnmConfig.MonsterMatchNames(token)
-                .Any(name => monsterNames.Contains(name, StringComparer.OrdinalIgnoreCase)));
+            .Any(token => HnmConfig.SpawnKey(token) == spawnKey);
     }
 
     // True when the pipe-delimited filter explicitly contains the given event

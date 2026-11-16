@@ -88,21 +88,30 @@ public sealed class MonsterTimingEditor
             named.Add((edit, name));
         }
 
-        // Two rows must not claim ONE spawn. The unique index only catches identical normalized
-        // names; "Nidhogg" beside "Fafnir/Nidhogg" are different strings for the same monster, and
-        // would make every lookup depend on which row the alias index happened to see first.
-        var claimedAliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var (_, name) in named)
+        // Two rows must not claim ONE spawn. "Nidhogg" beside "Fafnir/Nidhogg" are different strings
+        // for the same monster: they share a spawn key (HnmConfig.SpawnKey), which the unique index
+        // IX_LinkshellMonsterTimings_LinkshellId_SpawnKey refuses. Caught here first, so the officer
+        // gets a message rather than a failed save.
+        //
+        // Checked on the name each row will actually be SAVED under: a built-in row keeps its own
+        // name whatever the client sent (see the loop below), so the sent name proves nothing.
+        var claimedKeys = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var (edit, sentName) in named)
         {
-            foreach (var alias in HnmConfig.MonsterMatchNames(name))
+            var name = edit.Id is int rowId
+                && existing.FirstOrDefault(candidate => candidate.Id == rowId) is { IsCustom: false } builtIn
+                    ? builtIn.MonsterName
+                    : sentName;
+            if (HnmConfig.SpawnKey(name) is not { } key)
             {
-                if (claimedAliases.TryGetValue(alias, out var owner)
-                    && !owner.Equals(name, StringComparison.OrdinalIgnoreCase))
-                {
-                    return $"{owner} and {name} are the same spawn — keep one row for them.";
-                }
-                claimedAliases[alias] = name;
+                continue;
             }
+            if (claimedKeys.TryGetValue(key, out var owner)
+                && !owner.Equals(name, StringComparison.OrdinalIgnoreCase))
+            {
+                return $"{owner} and {name} are the same spawn — keep one row for them.";
+            }
+            claimedKeys[key] = name;
         }
 
         var now = DateTime.UtcNow;
