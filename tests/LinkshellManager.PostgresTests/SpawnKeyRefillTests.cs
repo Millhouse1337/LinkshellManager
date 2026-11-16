@@ -139,6 +139,50 @@ public class SpawnKeyRefillTests : IAsyncLifetime
         }
     }
 
+    // An older build never touches SpawnKey, so renames it saves can leave two Monster Setups rows
+    // holding each other's keys, or a new row whose name is the old key of a renamed one. Every key
+    // is still unique, and so is every correct key, but writing them in one UPDATE would clash with
+    // a row not yet re-keyed (Postgres checks a plain unique index row by row). The refill must still
+    // re-key them all.
+    [Fact]
+    public async Task TimingKeysThatCross_AfterRenames_AreStillReKeyed()
+    {
+        await SeedAsync();
+        await using (var c = await OpenAsync())
+        {
+            // Swap two names (via a temporary one, as three saves would).
+            await ExecuteAsync(c,
+                "UPDATE \"LinkshellMonsterTimings\" SET \"MonsterName\" = 'tmp', \"NormalizedMonsterName\" = 'tmp' " +
+                "WHERE \"MonsterName\" = 'King Behemoth'");
+            await ExecuteAsync(c,
+                "UPDATE \"LinkshellMonsterTimings\" SET \"MonsterName\" = 'King Behemoth', \"NormalizedMonsterName\" = 'king behemoth' " +
+                "WHERE \"MonsterName\" = ' Fafnir/Nidhogg '");
+            await ExecuteAsync(c,
+                "UPDATE \"LinkshellMonsterTimings\" SET \"MonsterName\" = ' Fafnir/Nidhogg ', \"NormalizedMonsterName\" = 'fafnir/nidhogg' " +
+                "WHERE \"MonsterName\" = 'tmp'");
+            // Rename Tiamat (it keeps the key 'tiamat'), then add a new Tiamat row with no key.
+            await ExecuteAsync(c,
+                "UPDATE \"LinkshellMonsterTimings\" SET \"MonsterName\" = 'Vrtra', \"NormalizedMonsterName\" = 'vrtra' " +
+                "WHERE \"MonsterName\" = 'Tiamat'");
+            await ExecuteAsync(c,
+                "INSERT INTO \"LinkshellMonsterTimings\" (\"LinkshellId\", \"MonsterName\", \"NormalizedMonsterName\", " +
+                "\"CooldownMinutes\", \"Category\", \"IsCustom\", \"ClaimShieldEnabled\", \"AdditionalSeconds\", \"SortOrder\", " +
+                "\"CreatedAtUtc\", \"UpdatedAtUtc\") " +
+                "SELECT \"LinkshellId\", 'Tiamat', 'tiamat', \"CooldownMinutes\", \"Category\", true, \"ClaimShieldEnabled\", " +
+                "\"AdditionalSeconds\", 9, \"CreatedAtUtc\", \"UpdatedAtUtc\" FROM \"LinkshellMonsterTimings\" WHERE \"MonsterName\" = 'Vrtra'");
+        }
+
+        var log = new MigrationNoticeLoggingTests.CapturingLogger();
+        await using (var db = _pg.CreateContext())
+        {
+            Assert.Equal(4, await SpawnKeyRefill.RunAsync(db, log, CancellationToken.None));
+        }
+        Assert.Equal(
+            new[] { "SpawnKey refill: re-keyed 4 row(s) in LinkshellMonsterTimings (saved by an older build)." },
+            log.Entries.Select(e => e.Message));
+        await AssertEveryKeyMatchesItsNameAsync();
+    }
+
     // Through EF, so the hook stamps every key.
     private async Task SeedAsync()
     {

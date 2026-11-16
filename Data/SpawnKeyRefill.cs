@@ -14,9 +14,13 @@ namespace LinkshellManagerDiscordApp.Data;
 // newer build is deployed again. Tods, PendingTodSubmissions and HnmRecurringBoards are checked too
 // (every build since Round 4 stamps them, so they should never need it).
 //
-// Each table is one UPDATE that only writes rows whose stored key differs from the key its name
-// gives (TodDerivedSql.SpawnKeySql, the SQL copy of HnmConfig.SpawnKey). A healthy database writes
-// nothing and logs nothing. A table that fails (say a re-key would put two Monster Setups rows of
+// Each table only writes rows whose stored key differs from the key its name gives
+// (TodDerivedSql.SpawnKeySql, the SQL copy of HnmConfig.SpawnKey). A healthy database writes
+// nothing and logs nothing. Where the key may be NULL, those rows are first cleared and then
+// filled, in one transaction: an older build's renames can leave two Monster Setups rows holding
+// each other's keys (or a new row named like a renamed row's old key), and Postgres checks a
+// unique index row by row, so writing the right keys in a single UPDATE would clash with a row not
+// yet re-keyed. NULLs never clash, so clearing first lets every right key in. A table that fails (say a re-key would put two Monster Setups rows of
 // one linkshell on one spawn, which the unique index refuses) is logged as a Warning and skipped;
 // the other tables still run and start-up never stops here. No DKP, gil, ledger or loot row is
 // touched, and no row is deleted.
@@ -35,12 +39,22 @@ public static class SpawnKeyRefill
         ("HnmRecurringBoards", "MonsterName", true),
     ];
 
-    // One table's repair. Returns the rows it wrote (ExecuteNonQuery).
-    public static string RefillSql(string table, string nameColumn, bool keyRequired) => $"""
+    // One table's repair: every row whose stored key differs gets the derived key. Returns the
+    // rows it wrote (ExecuteNonQuery). keyRequired leaves out rows whose name gives no key.
+    public static string RefillSql(string table, string nameColumn, bool keyRequired) =>
+        UpdateDifferingSql(table, nameColumn, "d.k", keyRequired ? " AND d.k IS NOT NULL" : "");
+
+    // Sets SpawnKey to NULL on every row whose stored key differs from the derived one, so the
+    // RefillSql that follows (same transaction) cannot clash with an old key. Only for a column
+    // that allows NULL. Returns the rows that differed.
+    public static string ClearSql(string table, string nameColumn) =>
+        UpdateDifferingSql(table, nameColumn, "NULL", "");
+
+    private static string UpdateDifferingSql(string table, string nameColumn, string value, string extra) => $"""
         WITH d AS (SELECT x."Id", {TodDerivedSql.SpawnKeySql($"x.\"{nameColumn}\"")} AS k FROM "{table}" x)
-        UPDATE "{table}" x SET "SpawnKey" = d.k
+        UPDATE "{table}" x SET "SpawnKey" = {value}
         FROM d
-        WHERE x."Id" = d."Id" AND x."SpawnKey" IS DISTINCT FROM d.k{(keyRequired ? " AND d.k IS NOT NULL" : "")}
+        WHERE x."Id" = d."Id" AND x."SpawnKey" IS DISTINCT FROM d.k{extra}
         """;
 
     // Returns the number of rows re-keyed across all tables (0 on a healthy database, and on a
@@ -61,7 +75,7 @@ public static class SpawnKeyRefill
             {
                 try
                 {
-                    var written = await ExecuteAsync(connection, RefillSql(table, nameColumn, keyRequired), cancellationToken);
+                    var written = await RefillTableAsync(connection, table, nameColumn, keyRequired, cancellationToken);
                     if (written > 0)
                     {
                         log.LogInformation(
@@ -84,11 +98,34 @@ public static class SpawnKeyRefill
         return total;
     }
 
+    // One table. A NOT NULL key column cannot be cleared, so it is one UPDATE (every build since
+    // Round 4 stamps those). Otherwise clear the differing keys, then fill them, in one transaction:
+    // if the fill fails (a real duplicate) the clear is undone with it and the old keys stay.
+    private static async Task<int> RefillTableAsync(
+        DbConnection connection, string table, string nameColumn, bool keyRequired, CancellationToken cancellationToken)
+    {
+        if (keyRequired)
+        {
+            return await ExecuteAsync(connection, null, RefillSql(table, nameColumn, keyRequired), cancellationToken);
+        }
+
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        var differing = await ExecuteAsync(connection, transaction, ClearSql(table, nameColumn), cancellationToken);
+        if (differing > 0)
+        {
+            await ExecuteAsync(connection, transaction, RefillSql(table, nameColumn, keyRequired), cancellationToken);
+        }
+        await transaction.CommitAsync(cancellationToken);
+        return differing;
+    }
+
     // A plain command on the open connection (as MigrationHealth does), so the row count comes
     // straight from Postgres and EF never parses the SQL text.
-    private static async Task<int> ExecuteAsync(DbConnection connection, string sql, CancellationToken cancellationToken)
+    private static async Task<int> ExecuteAsync(
+        DbConnection connection, DbTransaction? transaction, string sql, CancellationToken cancellationToken)
     {
         await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
         command.CommandText = sql;
         return await command.ExecuteNonQueryAsync(cancellationToken);
     }
