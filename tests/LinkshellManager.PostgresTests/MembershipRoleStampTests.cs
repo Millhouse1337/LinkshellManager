@@ -256,9 +256,10 @@ public class MembershipRoleStampTests : IAsyncLifetime
             await check.LinkshellRoles.CountAsync(r => r.LinkshellId == linkshellId));
     }
 
-    // The role delete checks holders by id (what holding a role means), so " Raider " (seeded with
-    // padding, holding Raider by id) is counted; otherwise the database would refuse the delete
-    // with an error instead of a message.
+    // The role delete checks holders by id (what holding a role means). The last holder's Rank text
+    // is made stale by hand in SQL (every save re-stamps it, so only a hand edit can do this): the
+    // id still holds Raider, so the delete is refused with a message. A check by Rank would let it
+    // through and the database would refuse the delete with an error instead.
     [Fact]
     public async Task RoleDelete_IsRefusedWhileAnyoneHoldsIt_ThenWorks()
     {
@@ -270,7 +271,10 @@ public class MembershipRoleStampTests : IAsyncLifetime
             var member = await db.AppUserLinkshells.SingleAsync(m => m.Id == seed.Members[Raider]);
             member.Rank = LinkshellRanks.Member;
             await db.SaveChangesAsync();
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $"""UPDATE "AppUserLinkshells" SET "Rank" = 'Member' WHERE "Id" = {seed.Members[Padded]}""");
         }
+        Assert.Equal(raiderRole, await RoleIdOfAsync(seed.Members[Padded]));
 
         await using (var db = _pg.CreateContext())
         {
@@ -281,7 +285,7 @@ public class MembershipRoleStampTests : IAsyncLifetime
         await using (var db = _pg.CreateContext())
         {
             var member = await db.AppUserLinkshells.SingleAsync(m => m.Id == seed.Members[Padded]);
-            member.Rank = LinkshellRanks.Member;
+            member.LinkshellRoleId = seed.Roles[(seed.Main, LinkshellRanks.Member)];
             await db.SaveChangesAsync();
         }
 

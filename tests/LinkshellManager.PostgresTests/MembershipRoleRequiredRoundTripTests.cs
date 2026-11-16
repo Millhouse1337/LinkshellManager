@@ -46,6 +46,7 @@ public class MembershipRoleRequiredRoundTripTests
         "LEADER",      // "leader" in any capitals: the Leader role
         "leader ",     // not IsLeader (untrimmed) and no exact role: Member
         "Raider",      // a custom role of this linkshell
+        " Trial　 ", // non-ASCII spaces .NET trims (no-break, ideographic, a U+2000-200A one): Trial
         "Trial",
         "",
         "   ",
@@ -89,12 +90,12 @@ public class MembershipRoleRequiredRoundTripTests
             // Up.
             var log = await MigrateAsync(connectionString, MembershipRoleRequired);
             await AssertRequiredAsync(connectionString, before, expected, roles, otherRoles);
-            Assert.Contains("Postgres NOTICE during migration: MembershipRoleRequired: 3 role id(s) filled from Rank.", log);
+            Assert.Contains("Postgres NOTICE during migration: MembershipRoleRequired: 4 role id(s) filled from Rank.", log);
             Assert.Contains("Postgres NOTICE during migration: MembershipRoleRequired: 1 membership(s) given the Leader role.", log);
             Assert.Contains("Postgres NOTICE during migration: MembershipRoleRequired: 7 membership(s) given the Member role.", log);
-            // " Officer ", "officer", "Auctionner", "LEADER", "leader ", "", "   ", NULL, "Member " and
-            // linkshell 2's "Raider".
-            Assert.Contains("Postgres NOTICE during migration: MembershipRoleRequired: 10 Rank text(s) set to the role name.", log);
+            // " Officer ", "officer", "Auctionner", "LEADER", "leader ", the padded "Trial", "", "   ", NULL,
+            // "Member " and linkshell 2's "Raider".
+            Assert.Contains("Postgres NOTICE during migration: MembershipRoleRequired: 11 Rank text(s) set to the role name.", log);
             Assert.Contains("Postgres NOTICE during migration: MembershipRoleRequired: LinkshellRoleId is now NOT NULL.", log);
             Assert.DoesNotContain(log, line => line.Contains("WARNING"));
             var afterUp = await MembersAsync(connectionString);
