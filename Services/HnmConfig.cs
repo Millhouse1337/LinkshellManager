@@ -113,6 +113,10 @@ public static class HnmConfig
     // so a segments-only comparison never matched the very ToD that board just produced and
     // the board silently stopped re-posting. Matching on this set is symmetric: a board on
     // "Fafnir", "Nidhogg" or "Fafnir/Nidhogg" finds a ToD logged under any of the three.
+    //
+    // Since Round 5 rows are LOOKED UP by SpawnKey (below). This list stays for what a key cannot
+    // do: the names the addon listens for in chat, the Claim Shield spawn messages, matching free
+    // text such as an event's name, and the MatchNames the ToD readouts hand to the app.
     public static IReadOnlyCollection<string> MonsterMatchNames(string? name)
     {
         if (string.IsNullOrWhiteSpace(name))
@@ -138,13 +142,9 @@ public static class HnmConfig
         return matches;
     }
 
-    // Lower-cased MonsterMatchNames, ready to hand to a `names.Contains(x.ToLower())`
-    // EF predicate (the shape every call site here uses).
-    public static List<string> MonsterMatchNamesLower(string? name) =>
-        MonsterMatchNames(name).Select(n => n.ToLowerInvariant()).ToList();
-
-    // One lower-case key per SPAWN, stored as SpawnKey on Tods, PendingTodSubmissions and
-    // HnmRecurringBoards so a later deploy can look rows up with one equality instead of the
+    // One lower-case key per SPAWN, stored as SpawnKey on Tods, PendingTodSubmissions,
+    // HnmRecurringBoards and (Round 5) the camp tables: Events, PartySetups, ClaimShieldCaptures and
+    // LinkshellMonsterTimings. Rows are looked up with one equality on it instead of the
     // MonsterMatchNames list. Either half of a merge pair, or the combined label, gives the pair's
     // combined key ("fafnir/nidhogg"); any other name gives its trimmed, lower-case pieces joined
     // by '/'. Blank gives null.

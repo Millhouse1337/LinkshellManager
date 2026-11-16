@@ -49,7 +49,11 @@ public class SpawnKeyLookupTests
     {
         // The old rule compared the stored name as written, so a padded stored name never matched.
         // No production name is padded; the new rule trims, so it finds those rows too.
-        var oldRule = HnmConfig.MonsterMatchNamesLower(asked).Contains(stored.ToLowerInvariant());
+        // (The old rule's lower-cased list, MonsterMatchNamesLower, is spelled out here: the helper
+        // was deleted once nothing in the app used it.)
+        var oldRule = HnmConfig.MonsterMatchNames(asked)
+            .Select(name => name.ToLowerInvariant())
+            .Contains(stored.ToLowerInvariant());
         var newRule = HnmConfig.SpawnKey(asked) == HnmConfig.SpawnKey(stored);
         if (stored == stored.Trim())
         {

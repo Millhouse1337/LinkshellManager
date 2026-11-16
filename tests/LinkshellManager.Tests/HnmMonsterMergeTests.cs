@@ -77,10 +77,6 @@ public class HnmMonsterMergeTests
         Assert.DoesNotContain("Adamantoise", matches);
     }
 
-    [Fact]
-    public void MonsterMatchNamesLower_IsLowerCasedForDbComparison() =>
-        Assert.Contains("fafnir/nidhogg", HnmConfig.MonsterMatchNamesLower("Fafnir"));
-
     // The re-posted sign-up board is for the NEXT pop, so it advances the day cycle.
     [Theory]
     [InlineData(1, 2)]
