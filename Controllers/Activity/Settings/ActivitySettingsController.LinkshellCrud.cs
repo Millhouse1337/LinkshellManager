@@ -63,9 +63,6 @@ public sealed partial class ActivitySettingsController
         {
             AppUserId = appUser.Id,
             LinkshellId = linkshell.Id,
-#pragma warning disable CS0618 // Round 5 writer: the roster name is still written, as a copy of the main (never read).
-            CharacterName = appUser.CharacterName ?? appUser.UserName,
-#pragma warning restore CS0618
             Rank = LinkshellRanks.Leader,
             Status = "Active",
             LinkshellDkp = 0,

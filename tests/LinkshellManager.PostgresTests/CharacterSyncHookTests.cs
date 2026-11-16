@@ -276,11 +276,13 @@ public class CharacterSyncHookTests : IAsyncLifetime
         }
 
         var rows = await RowsAsync();
-        Assert.Equal(new[] { ("real", (short)0, "Bob"), ("real", (short)1, "Bobalt") },
+        // The placeholder's main takes the first empty alt slot, its alt the next (owner decision 2).
+        Assert.Equal(new[] { ("real", (short)0, "Bob"), ("real", (short)1, "Bobby"), ("real", (short)2, "Bobalt") },
             rows.Select(r => (r.AppUserId, r.Slot, r.Name)));
         Assert.Equal(new[] { 75 }, rows[0].JobLevels);
-        // The account's alt 1 jobs are not part of the claim's carry-over, so the copy has none.
+        // Alt jobs are not part of the claim's carry-over.
         Assert.Null(rows[1].JobLevels);
+        Assert.Null(rows[2].JobLevels);
         await AssertEqualToAccountsAsync();
     }
 

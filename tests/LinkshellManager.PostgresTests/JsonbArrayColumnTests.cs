@@ -80,8 +80,9 @@ public class JsonbArrayColumnTests : IAsyncLifetime
         }
     }
 
-    // The main character's jobs (AccountJobsAndKeyItemAccounts): written to the account as JSON the
-    // app reads back as the same arrays. (The old membership copies were dropped by Round4Contract.)
+    // The main character's jobs: written to its Characters row (CharacterWriter, Round 5) and
+    // mirrored onto the account, both as JSON the app reads back as the same arrays. (The old
+    // membership copies were dropped by Round4Contract.)
     [Fact]
     public async Task MainJobs_AreWrittenAsJsonOnTheAccount()
     {
@@ -91,13 +92,14 @@ public class JsonbArrayColumnTests : IAsyncLifetime
             var user = new AppUser { Id = "user-1", UserName = "user-1" };
             db.Linkshells.Add(linkshell);
             db.Users.Add(user);
+            LinkshellManagerDiscordApp.Services.CharacterWriter.ForNewAccount(db, user).SetName(Character.MainSlot, "Main");
             await db.SaveChangesAsync();
-            var membership = new AppUserLinkshell { LinkshellId = linkshell.Id, AppUserId = user.Id, CharacterName = "Main" };
+            var membership = new AppUserLinkshell { LinkshellId = linkshell.Id, AppUserId = user.Id };
             db.AppUserLinkshells.Add(membership);
             await db.SaveChangesAsync();
 
-            LinkshellManagerDiscordApp.Services.MainCharacterJobs.Write(
-                user, new[] { 0, 75, 37 }, new[] { 0, 1, 0 }, new[] { "", "Axe x5" });
+            var characters = await LinkshellManagerDiscordApp.Services.CharacterWriter.LoadAsync(db, user.Id, default);
+            characters.SetJobs(Character.MainSlot, new[] { 0, 75, 37 }, new[] { 0, 1, 0 }, new[] { "", "Axe x5" });
             await db.SaveChangesAsync();
         }
 
@@ -109,6 +111,12 @@ public class JsonbArrayColumnTests : IAsyncLifetime
                     "FROM \"AspNetUsers\" WHERE \"Id\" = 'user-1'")
                 .SingleAsync();
             Assert.Equal("[0, 75, 37]|[0, 1, 0]|[\"\", \"Axe x5\"]", account);
+            var row = await db.Database
+                .SqlQueryRaw<string>(
+                    "SELECT concat_ws('|', \"JobLevels\"::text, \"StrongJobs\"::text, \"MeritJobs\"::text) AS \"Value\" " +
+                    "FROM \"Characters\" WHERE \"AppUserId\" = 'user-1' AND \"Slot\" = 0")
+                .SingleAsync();
+            Assert.Equal(account, row);
             var user = await db.Users.SingleAsync(u => u.Id == "user-1");
             Assert.Equal(new[] { 0, 75, 37 }, user.JobLevels);
             Assert.Equal(new[] { "", "Axe x5" }, user.MeritJobs);

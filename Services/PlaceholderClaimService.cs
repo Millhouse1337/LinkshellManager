@@ -39,7 +39,12 @@ public sealed class PlaceholderClaimService
         _merge = merge;
     }
 
-    public sealed record ClaimResult(bool Success, string? Error, IReadOnlyList<int> ClaimedLinkshellIds);
+    public sealed record ClaimResult(bool Success, string? Error, IReadOnlyList<int> ClaimedLinkshellIds)
+    {
+        // The placeholder's character names the real account had no empty slot for (both alts
+        // taken). Loot or attendance recorded under such a name no longer finds this account.
+        public IReadOnlyList<string> NamesNotKept { get; init; } = Array.Empty<string>();
+    }
 
     // Re-run from the top when one of the memberships was saved by another request (a DKP move)
     // during the claim (Data/ConcurrencyRetry.cs). The claim's transaction rolled back, so the re-run
@@ -128,28 +133,10 @@ public sealed class PlaceholderClaimService
         // Everything else: DKP history, attendance, window credits, loot, ratings, chart rows...
         var referencesLeft = await _merge.RepointAsync(placeholderAppUserId, realAppUserId, cancellationToken);
 
-        // Carry over identity fields the real account is missing (never clobber).
-        if (string.IsNullOrWhiteSpace(realUser.CharacterName) && !string.IsNullOrWhiteSpace(placeholder.CharacterName))
-        {
-            realUser.CharacterName = placeholder.CharacterName;
-        }
-#pragma warning disable CS0618 // Round 5 writer: the account columns are still the written source (R5.5 moves it to Characters).
-        if (string.IsNullOrWhiteSpace(realUser.AltCharacterName1) && !string.IsNullOrWhiteSpace(placeholder.AltCharacterName1))
-        {
-            realUser.AltCharacterName1 = placeholder.AltCharacterName1;
-        }
-        if (string.IsNullOrWhiteSpace(realUser.AltCharacterName2) && !string.IsNullOrWhiteSpace(placeholder.AltCharacterName2))
-        {
-            realUser.AltCharacterName2 = placeholder.AltCharacterName2;
-        }
-        // The main's jobs live on the account now, and go with the placeholder when it is deleted.
-        // The addon used to file a player's own jobs on whichever roster row had their name, often
-        // the placeholder's, so a real account with none takes them (never clobbered). The
-        // memberships that moved keep their own copies, which the previous build reads.
-        realUser.JobLevels ??= placeholder.JobLevels;
-        realUser.StrongJobs ??= placeholder.StrongJobs;
-        realUser.MeritJobs ??= placeholder.MeritJobs;
-#pragma warning restore CS0618
+        // Carry over the placeholder's characters (never clobber), so every name its DKP history,
+        // loot and attendance were recorded under still finds this account once the placeholder is
+        // gone. The roster name used to do that for its main; it is no longer read (Round 5).
+        var namesNotKept = await CarryOverCharactersAsync(placeholder.Id, realUser.Id, cancellationToken);
         await _db.SaveChangesAsync(cancellationToken);
 
         // Delete the placeholder only when nothing points at it any more. Something left means a
@@ -162,7 +149,50 @@ public sealed class PlaceholderClaimService
         }
 
         await tx.CommitAsync(cancellationToken);
-        return new ClaimResult(true, null, claimedLs);
+        return new ClaimResult(true, null, claimedLs) { NamesNotKept = namesNotKept };
+    }
+
+    // The placeholder's characters move to the real account's empty slots (owner decision 2):
+    // - a real account with no main takes the placeholder's main as its main;
+    // - otherwise the placeholder's main goes into the first empty alt slot, then its alts into
+    //   whatever alt slot is still empty;
+    // - a name the real account already has is skipped (it already resolves to this account);
+    // - the main's jobs (levels, strong flags, merit notes) go to the real main when it has none:
+    //   the addon used to file a player's own jobs on whichever roster row had their name, often
+    //   the placeholder's.
+    // Returns the names that did not fit (both alt slots taken), so the claim can say so.
+    private async Task<IReadOnlyList<string>> CarryOverCharactersAsync(
+        string placeholderId, string realId, CancellationToken cancellationToken)
+    {
+        var from = await AccountCharacters.LoadForAccountAsync(_db, placeholderId, cancellationToken);
+        var to = await CharacterWriter.LoadAsync(_db, realId, cancellationToken);
+        var notKept = new List<string>();
+
+        var fromMain = AccountCharacters.MainCharacter(from);
+        foreach (var character in from)
+        {
+            if (to.HasName(character.Name))
+            {
+                continue;
+            }
+            short? slot = character.Slot == Character.MainSlot && to[Character.MainSlot] is null
+                ? Character.MainSlot
+                : to.FirstFreeAltSlot();
+            if (slot is not { } free || !to.TrySetName(free, character.Name))
+            {
+                notKept.Add(character.Name);
+            }
+        }
+
+        if (fromMain is not null && to[Character.MainSlot] is { } realMain)
+        {
+            to.SetJobs(
+                Character.MainSlot,
+                jobLevels: realMain.JobLevels is null ? fromMain.JobLevels?.ToArray() : null,
+                strongJobs: realMain.StrongJobs is null ? fromMain.StrongJobs?.ToArray() : null,
+                meritJobs: realMain.MeritJobs is null ? fromMain.MeritJobs?.ToArray() : null);
+        }
+        return notKept;
     }
 
     // The real account already has a membership in this linkshell: it keeps that row and ADDS the

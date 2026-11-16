@@ -117,4 +117,32 @@ public static class AccountCharacters
 
     // How the account is shown when a name is needed: its main, else its login name.
     public static string DisplayName(AppUser user) => user.CharacterName ?? user.UserName ?? "Unknown";
+
+    // The addon may publish job levels only for a character of the account its token was issued to.
+    // Returns which of the owner's characters the name is (slot 0 main, 1 or 2 an alt) and the stored
+    // spelling, or null when it is none of them (another member's main or alt included). Spaces
+    // around a name and capitals do not matter.
+    //
+    // The owner's Characters rows are checked, lowest slot first. A name that is not there still
+    // counts as the main when it is the account's own CharacterName (a main too long for the table).
+    // The membership roster names are not read any more (Round 5): they only ever copied the main.
+    // (This lived in MainCharacterJobs, whose writers CharacterWriter replaced in R5.5.)
+    public static (short Slot, string Name)? OwnCharacterSlot(
+        string? characterName,
+        AppUser owner,
+        IReadOnlyCollection<Character> ownerCharacters)
+    {
+        var name = characterName?.Trim();
+        if (string.IsNullOrEmpty(name)) return null;
+
+        bool Same(string? stored) => string.Equals(stored?.Trim(), name, StringComparison.OrdinalIgnoreCase);
+
+        var character = ownerCharacters
+            .Where(c => c.AppUserId == owner.Id && c.Slot is >= Character.MainSlot and <= Character.Alt2Slot)
+            .OrderBy(c => c.Slot)
+            .FirstOrDefault(c => Same(c.Name));
+        if (character is not null) return (character.Slot, character.Name.Trim());
+
+        return Same(owner.CharacterName) ? (Character.MainSlot, owner.CharacterName!.Trim()) : null;
+    }
 }

@@ -13,8 +13,8 @@ using Xunit;
 
 namespace LinkshellManager.Tests;
 
-// A character's jobs live on the account: the main's in JobLevels / StrongJobs / MeritJobs
-// (AccountJobsAndKeyItemAccounts), each alt's in Alt1* / Alt2*, all copied to Characters. The
+// A character's jobs live on its Characters row (written by CharacterWriter since Round 5); the
+// save mirrors them onto the old account columns (JobLevels, Alt1*, Alt2*), which these tests read. The
 // addon (POST character/jobs) may write the job levels of any of its token owner's OWN characters:
 // the main, or since Round 5 one of the two alts. Anybody else's character is refused with 403.
 // (This was MainCharacterJobsTests, when the addon could write the main only.)
@@ -90,38 +90,49 @@ public class AddonCharacterJobsTests
 
     private static string Show(int[]? levels) => levels is null ? "-" : string.Join(",", levels);
 
-    // ---- Write ---------------------------------------------------------------------------------
+    // ---- the writer ----------------------------------------------------------------------------
 
-    // Only the account is written: it is the one home of the main's jobs.
+    // The addon's levels go to one character's Characters row (CharacterWriter.SetJobs); a null
+    // argument leaves that list alone, and the save mirrors the row onto the account.
     [Fact]
-    public void Write_SetsTheAccount_AndLeavesNullArgumentsAlone()
+    public async Task SetJobs_SetsTheRow_AndLeavesNullArgumentsAlone()
     {
-        var account = new AppUser { StrongJobs = new[] { 0, 1 }, MeritJobs = new[] { "kept" } };
+        await using var db = Seeded();
+        var set = await CharacterWriter.LoadAsync(db, "carol", CancellationToken.None);
+        set.SetJobs(Character.MainSlot, strongJobs: new[] { 0, 1 }, meritJobs: new[] { "kept" });
+        await db.SaveChangesAsync();
 
-        MainCharacterJobs.Write(account, jobLevels: new[] { 0, 75 });
+        set.SetJobs(Character.MainSlot, jobLevels: new[] { 0, 75 });
+        await db.SaveChangesAsync();
 
-        Assert.Equal(new[] { 0, 75 }, account.JobLevels);
-        // Untouched columns stay as they were.
-        Assert.Equal(new[] { 0, 1 }, account.StrongJobs);
-        Assert.Equal(new[] { "kept" }, account.MeritJobs);
+        var main = db.Characters.AsNoTracking().Single(c => c.AppUserId == "carol" && c.Slot == Character.MainSlot);
+        Assert.Equal(new[] { 0, 75 }, main.JobLevels);
+        Assert.Equal(new[] { 0, 1 }, main.StrongJobs);
+        Assert.Equal(new[] { "kept" }, main.MeritJobs);
     }
 
     [Theory]
-    [InlineData(0, "0,75|-|-")]
-    [InlineData(1, "-|0,75|-")]
-    [InlineData(2, "-|-|0,75")]
-    public void WriteJobLevels_WritesOnlyThatSlot(short slot, string expected)
+    [InlineData(0, "bob:0,75|0,11|0,22")]
+    [InlineData(1, "bob:0,1|0,75|0,22")]
+    [InlineData(2, "bob:0,1|0,11|0,75")]
+    public async Task SetJobs_WritesOnlyThatSlot(short slot, string expected)
     {
-        var account = new AppUser();
+        await using var db = Seeded();
+        var set = await CharacterWriter.LoadAsync(db, "bob", CancellationToken.None);
 
-        MainCharacterJobs.WriteJobLevels(account, slot, new[] { 0, 75 });
+        set.SetJobs(slot, jobLevels: new[] { 0, 75 });
+        await db.SaveChangesAsync();
 
-        Assert.Equal(expected, $"{Show(account.JobLevels)}|{Show(account.Alt1JobLevels)}|{Show(account.Alt2JobLevels)}");
+        Assert.Equal(expected, AllJobs(db)[0]);
     }
 
     [Fact]
-    public void WriteJobLevels_RefusesASlotThatDoesNotExist() =>
-        Assert.Throws<ArgumentOutOfRangeException>(() => MainCharacterJobs.WriteJobLevels(new AppUser(), 3, new[] { 1 }));
+    public async Task SetJobs_RefusesASlotThatDoesNotExist()
+    {
+        await using var db = Seeded();
+        var set = await CharacterWriter.LoadAsync(db, "bob", CancellationToken.None);
+        Assert.Throws<ArgumentOutOfRangeException>(() => set.SetJobs(3, jobLevels: new[] { 1 }));
+    }
 
     // ---- OwnCharacterSlot ----------------------------------------------------------------------
 
@@ -142,7 +153,7 @@ public class AddonCharacterJobsTests
         var owner = db.Users.Single(u => u.Id == "bob");
         var characters = db.Characters.Where(c => c.AppUserId == "bob").ToList();
 
-        var matched = MainCharacterJobs.OwnCharacterSlot(typed, owner, characters);
+        var matched = AccountCharacters.OwnCharacterSlot(typed, owner, characters);
 
         if (stored is null)
         {
@@ -161,7 +172,7 @@ public class AddonCharacterJobsTests
         var owner = new AppUser { Id = "bob", CharacterName = "Bob" };
         var characters = new[] { new Character { AppUserId = "carol", Slot = 1, Name = "Carolalt" } };
 
-        Assert.Null(MainCharacterJobs.OwnCharacterSlot("Carolalt", owner, characters));
+        Assert.Null(AccountCharacters.OwnCharacterSlot("Carolalt", owner, characters));
     }
 
     // The account's own name is still the main when Characters does not have it. A roster name is
@@ -172,9 +183,9 @@ public class AddonCharacterJobsTests
         var owner = new AppUser { Id = "me", CharacterName = " Mainname " };
         var none = Array.Empty<Character>();
 
-        Assert.Equal(((short)0, "Mainname"), MainCharacterJobs.OwnCharacterSlot("mainname", owner, none));
-        Assert.Null(MainCharacterJobs.OwnCharacterSlot("ROSTERNAME", owner, none));
-        Assert.Null(MainCharacterJobs.OwnCharacterSlot("ELSEWHERE", owner, none));
+        Assert.Equal(((short)0, "Mainname"), AccountCharacters.OwnCharacterSlot("mainname", owner, none));
+        Assert.Null(AccountCharacters.OwnCharacterSlot("ROSTERNAME", owner, none));
+        Assert.Null(AccountCharacters.OwnCharacterSlot("ELSEWHERE", owner, none));
     }
 
     // ---- POST character/jobs -------------------------------------------------------------------
@@ -211,7 +222,7 @@ public class AddonCharacterJobsTests
         Assert.Equal(new[] { expectedBob, "carol:0,50|0,51|-", "dave:-|-|-" }, AllJobs(db));
     }
 
-    // The account columns are still the written source; the save copies them to Characters.
+    // The levels are written to the alt's Characters row.
     [Fact]
     public async Task OwnAlt_ItsCharactersRowGetsTheLevels_AfterTheSave()
     {

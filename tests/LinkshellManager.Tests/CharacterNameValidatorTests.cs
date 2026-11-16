@@ -100,15 +100,15 @@ public class CharacterNameValidatorTests
     }
 
     [Fact]
-    public async Task ANameLongerThanTheCharactersTableHolds_IsRefused_OnlyWhenItChanged()
+    public async Task ANameLongerThanTheWriterTakes_IsRefused_OnlyWhenItChanged()
     {
         using var db = NewInMemoryContext();
-        var tooLong = new string('x', Character.MaxNameLength + 1);
+        var tooLong = new string('x', CharacterWriter.MaxNameLength + 1);
         var validator = new CharacterNameValidator(db);
 
         var (ok, error) = await validator.ValidateAsync(NewUser(), "Main", tooLong, null);
         Assert.False(ok);
-        Assert.Contains("at most 256 characters", error);
+        Assert.Contains("at most 64 characters", error);
 
         var old = new AppUser { Id = "user-1", UserName = "tester", CharacterName = tooLong };
         Assert.Equal((true, (string?)null), await validator.ValidateAsync(old, tooLong, "Alt", null));

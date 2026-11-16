@@ -39,6 +39,10 @@ public sealed partial class ActivityOverviewController
             return BadRequest(new { error = "Use a valid IANA time zone such as America/New_York." });
         }
 
+        // One transaction for the names and the jobs: CharacterWriter takes the account's lock in
+        // it, so two saves of one profile at the same moment run one after the other.
+        await using var transaction = await CharacterWriter.BeginTransactionAsync(_dbContext, cancellationToken);
+
         var result = await _appUserProfileService.UpdateProfileAsync(
             appUser,
             request.CharacterName,
@@ -54,119 +58,49 @@ public sealed partial class ActivityOverviewController
             return BadRequest(new { error = errorMessage });
         }
 
-        // The main character's jobs live on the account, in the addon's FFXI-job-id format; the
-        // client sends catalog-aligned arrays (index 0 = WAR ... 14 = SMN), merged into what the
-        // account already holds.
-#pragma warning disable CS0618 // Round 5 writer: jobs and crafts are merged into the account columns, still the written source (R5.5 moves it to Characters).
-        var mainJobsChanged = false;
-        if (request.JobLevels is { Length: > 0 } || request.StrongJobs is { Length: > 0 } || request.MeritJobs is { Length: > 0 })
+        // Jobs and crafts belong to a character (its Characters row). An alt whose name was just
+        // cleared has no row any more, so its jobs and crafts went with it. Job arrays are kept in
+        // the addon's FFXI-job-id format; the client sends catalog-aligned arrays (index 0 = WAR ...
+        // 14 = SMN), merged into what the character already holds. Crafts are stored as sent.
+        var characters = await CharacterWriter.LoadAsync(_dbContext, appUser.Id, cancellationToken);
+        var changed = false;
+        changed |= MergeJobs(characters, Character.MainSlot, request.JobLevels, request.StrongJobs, request.MeritJobs);
+        changed |= MergeJobs(characters, Character.Alt1Slot, request.Alt1JobLevels, request.Alt1StrongJobs, request.Alt1MeritJobs);
+        changed |= MergeJobs(characters, Character.Alt2Slot, request.Alt2JobLevels, request.Alt2StrongJobs, request.Alt2MeritJobs);
+        changed |= SetCrafts(characters, Character.MainSlot, request.CraftLevels);
+        changed |= SetCrafts(characters, Character.Alt1Slot, request.Alt1CraftLevels);
+        changed |= SetCrafts(characters, Character.Alt2Slot, request.Alt2CraftLevels);
+        if (changed)
         {
-            MainCharacterJobs.Write(
-                appUser,
-                jobLevels: request.JobLevels is { Length: > 0 }
-                    ? ProfileJobLevels.MergeIntoStored(appUser.JobLevels, request.JobLevels)
-                    : null,
-                // "Strong" flags ride alongside the levels: one character's set of strengths.
-                strongJobs: request.StrongJobs is { Length: > 0 }
-                    ? ProfileJobLevels.MergeFlagsIntoStored(appUser.StrongJobs, request.StrongJobs)
-                    : null,
-                // Merit notes (catalog-aligned text).
-                meritJobs: request.MeritJobs is { Length: > 0 }
-                    ? ProfileJobLevels.NormalizeMerits(request.MeritJobs)
-                    : null);
-            mainJobsChanged = true;
             await _dbContext.SaveChangesAsync(cancellationToken);
         }
 
-        // Alt-character job levels live on the AppUser (not per-membership). Clear
-        // an alt's jobs when its name is removed; otherwise merge the submitted
-        // catalog-aligned levels.
-        var altJobsChanged = false;
-        if (string.IsNullOrWhiteSpace(request.AltCharacterName1))
+        if (transaction is not null)
         {
-            if (appUser.Alt1JobLevels is not null) { appUser.Alt1JobLevels = null; altJobsChanged = true; }
-            if (appUser.Alt1StrongJobs is not null) { appUser.Alt1StrongJobs = null; altJobsChanged = true; }
-            if (appUser.Alt1MeritJobs is not null) { appUser.Alt1MeritJobs = null; altJobsChanged = true; }
+            await transaction.CommitAsync(cancellationToken);
         }
-        else
-        {
-            if (request.Alt1JobLevels is { Length: > 0 })
-            {
-                appUser.Alt1JobLevels = ProfileJobLevels.MergeIntoStored(appUser.Alt1JobLevels, request.Alt1JobLevels);
-                altJobsChanged = true;
-            }
-            if (request.Alt1StrongJobs is { Length: > 0 })
-            {
-                appUser.Alt1StrongJobs = ProfileJobLevels.MergeFlagsIntoStored(appUser.Alt1StrongJobs, request.Alt1StrongJobs);
-                altJobsChanged = true;
-            }
-            if (request.Alt1MeritJobs is { Length: > 0 })
-            {
-                appUser.Alt1MeritJobs = ProfileJobLevels.NormalizeMerits(request.Alt1MeritJobs);
-                altJobsChanged = true;
-            }
-        }
-        if (string.IsNullOrWhiteSpace(request.AltCharacterName2))
-        {
-            if (appUser.Alt2JobLevels is not null) { appUser.Alt2JobLevels = null; altJobsChanged = true; }
-            if (appUser.Alt2StrongJobs is not null) { appUser.Alt2StrongJobs = null; altJobsChanged = true; }
-            if (appUser.Alt2MeritJobs is not null) { appUser.Alt2MeritJobs = null; altJobsChanged = true; }
-        }
-        else
-        {
-            if (request.Alt2JobLevels is { Length: > 0 })
-            {
-                appUser.Alt2JobLevels = ProfileJobLevels.MergeIntoStored(appUser.Alt2JobLevels, request.Alt2JobLevels);
-                altJobsChanged = true;
-            }
-            if (request.Alt2StrongJobs is { Length: > 0 })
-            {
-                appUser.Alt2StrongJobs = ProfileJobLevels.MergeFlagsIntoStored(appUser.Alt2StrongJobs, request.Alt2StrongJobs);
-                altJobsChanged = true;
-            }
-            if (request.Alt2MeritJobs is { Length: > 0 })
-            {
-                appUser.Alt2MeritJobs = ProfileJobLevels.NormalizeMerits(request.Alt2MeritJobs);
-                altJobsChanged = true;
-            }
-        }
-        // Per-craft levels (account-level for the main + alts). Stored as-is (a
-        // plain ordered array — no FFXI-job-id mapping). Clear an alt's crafts when
-        // its name is removed.
-        var craftsChanged = altJobsChanged;
-        if (request.CraftLevels is { Length: > 0 })
-        {
-            appUser.CraftLevels = request.CraftLevels;
-            craftsChanged = true;
-        }
-        if (string.IsNullOrWhiteSpace(request.AltCharacterName1))
-        {
-            if (appUser.Alt1CraftLevels is not null) { appUser.Alt1CraftLevels = null; craftsChanged = true; }
-        }
-        else if (request.Alt1CraftLevels is { Length: > 0 })
-        {
-            appUser.Alt1CraftLevels = request.Alt1CraftLevels;
-            craftsChanged = true;
-        }
-        if (string.IsNullOrWhiteSpace(request.AltCharacterName2))
-        {
-            if (appUser.Alt2CraftLevels is not null) { appUser.Alt2CraftLevels = null; craftsChanged = true; }
-        }
-        else if (request.Alt2CraftLevels is { Length: > 0 })
-        {
-            appUser.Alt2CraftLevels = request.Alt2CraftLevels;
-            craftsChanged = true;
-        }
-#pragma warning restore CS0618
-
-        // The account itself (crafts, alts and the main's jobs) is saved through Identity.
-        if (craftsChanged || mainJobsChanged)
-        {
-            await _userManager.UpdateAsync(appUser);
-        }
-
         return Ok(new { success = true });
     }
+
+    // Merges the submitted (catalog-aligned) levels, strong flags and merit notes into one
+    // character's stored jobs. An empty or missing array leaves that list alone.
+    private static bool MergeJobs(CharacterSet characters, short slot, int[]? levels, bool[]? strong, string[]? merits)
+    {
+        var row = characters[slot];
+        if (row is null)
+        {
+            return false;
+        }
+        return characters.SetJobs(
+            slot,
+            jobLevels: levels is { Length: > 0 } ? ProfileJobLevels.MergeIntoStored(row.JobLevels, levels) : null,
+            // "Strong" flags ride alongside the levels: one character's set of strengths.
+            strongJobs: strong is { Length: > 0 } ? ProfileJobLevels.MergeFlagsIntoStored(row.StrongJobs, strong) : null,
+            meritJobs: merits is { Length: > 0 } ? ProfileJobLevels.NormalizeMerits(merits) : null);
+    }
+
+    private static bool SetCrafts(CharacterSet characters, short slot, int[]? crafts) =>
+        crafts is { Length: > 0 } && characters.SetCrafts(slot, crafts);
 
     public sealed record DetectTimeZoneRequest(string? TimeZone);
 

@@ -649,9 +649,7 @@ public sealed class DiscordIdentityService
                     LinkshellId = invite.LinkshellId,
                     LinkshellDkp = 0,
                     DateJoined = DateTime.UtcNow,
-#pragma warning disable CS0618 // Round 5 writer: the roster name is still written, as a copy of the main (never read).
-                    CharacterName = appUser.CharacterName ?? appUser.UserName,
-#pragma warning restore CS0618
+                    // The roster name is stamped by the save (a copy of the account's main).
                     Rank = LinkshellRanks.Member,
                     Status = "Active"
                 };
@@ -817,7 +815,8 @@ public sealed class DiscordIdentityService
                         appUser.NormalizedUserName = _userManager.NormalizeName(promotedUserName);
                         if (string.IsNullOrWhiteSpace(appUser.CharacterName))
                         {
-                            appUser.CharacterName = discordUser.GlobalName ?? discordUser.Username;
+                            var characters = await CharacterWriter.LoadAsync(_dbContext, appUser.Id, cancellationToken);
+                            characters.TrySetName(Character.MainSlot, discordUser.GlobalName ?? discordUser.Username);
                         }
                         // The real account now owns identity — clear the Discord-id
                         // shortcut on the rows that pointed here.
@@ -841,24 +840,31 @@ public sealed class DiscordIdentityService
                     // TimeZone is left null intentionally. The clients auto-detect the
                     // browser zone on first page load via /api/activity/profile/detect-time-zone
                     // and persist it there, so we don't lock new users into UTC.
+                    // The Discord name becomes the main character (CharacterWriter); the save copies
+                    // it onto CharacterName.
                     appUser = new AppUser
                     {
                         UserName = $"discord-{discordUser.Id}",
-                        CharacterName = discordUser.GlobalName ?? discordUser.Username
                     };
+                    var newCharacters = CharacterWriter.ForNewAccount(_dbContext, appUser);
+                    newCharacters.TrySetName(Character.MainSlot, discordUser.GlobalName ?? discordUser.Username);
 
                     var createResult = await _userManager.CreateAsync(appUser);
                     if (!createResult.Succeeded)
                     {
+                        newCharacters.DiscardChanges();
                         throw new InvalidOperationException(string.Join("; ", createResult.Errors.Select(error => error.Description)));
                     }
                 }
 
+                // An account with no main yet takes the Discord name as its main (unless one of its
+                // alts already has that name).
                 var shouldUpdateAppUser = false;
                 if (string.IsNullOrWhiteSpace(appUser.CharacterName))
                 {
-                    appUser.CharacterName = discordUser.GlobalName ?? discordUser.Username;
-                    shouldUpdateAppUser = true;
+                    var characters = await CharacterWriter.LoadAsync(_dbContext, appUser.Id, cancellationToken);
+                    shouldUpdateAppUser = characters[Character.MainSlot] is null
+                        && characters.TrySetName(Character.MainSlot, discordUser.GlobalName ?? discordUser.Username);
                 }
 
                 // No avatar image is downloaded: DiscordActivityUsers.Avatar (the hash, below) is all a

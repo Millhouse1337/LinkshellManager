@@ -69,14 +69,55 @@ public class PlaceholderClaimServiceTests
         Assert.Equal(100d, member.LinkshellDkp);
         Assert.Null(member.DiscordUserId);
         Assert.Null(db.Users.Find(Ph));
-        // The real account had no alt; it takes the placeholder's.
-        Assert.Equal("Bobthree", db.Users.Find(Real)!.AltCharacterName1);
+        // The real account had no alts: the placeholder's main takes the first empty alt slot and its
+        // alt the next (owner decision 2, Round 5), so both names still find this account. The moved
+        // roster row takes the real account's main.
+        var real = db.Users.Find(Real)!;
+        Assert.Equal(("Bob", "Bobalt", "Bobthree"), (real.CharacterName, real.AltCharacterName1, real.AltCharacterName2));
+        Assert.Equal(new[] { "Bob", "Bobalt", "Bobthree" },
+            db.Characters.AsNoTracking().Where(c => c.AppUserId == Real).OrderBy(c => c.Slot).Select(c => c.Name).ToArray());
+        Assert.Empty(result.NamesNotKept);
+        Assert.Equal("Bob", member.CharacterName);
 
         var rows = db.DkpLedgerEntries.ToList();
         Assert.All(rows, r => Assert.Equal(Real, r.AppUserId));
         Assert.Equal(100d, rows.Sum(r => r.Amount));
         var note = Assert.Single(rows, r => r.EntryType == PlaceholderClaimService.MergeEntryType);
         Assert.Equal(0d, note.Amount);
+    }
+
+    // Owner decision 2 (Round 5): a name the real account already has is skipped, and a name with no
+    // empty alt slot left is reported back instead of silently dropped.
+    [Fact]
+    public async Task ThePlaceholdersNames_FillOnlyEmptySlots_AndTheRestAreReported()
+    {
+        using var db = NewDb();
+        var characters = await CharacterWriter.LoadAsync(db, Real, CancellationToken.None);
+        characters.SetName(Character.Alt1Slot, "Bobthree"); // already one of the placeholder's names
+        db.SaveChanges();
+        Member(db, 10, Ph, "Bobalt", 100);
+
+        var result = await NewService(db).ClaimPlaceholderAsync(Ph, Real, Ls, CancellationToken.None);
+
+        Assert.True(result.Success, result.Error);
+        Assert.Empty(result.NamesNotKept);
+        Assert.Equal(new[] { "Bob", "Bobthree", "Bobalt" },
+            db.Characters.AsNoTracking().Where(c => c.AppUserId == Real).OrderBy(c => c.Slot).Select(c => c.Name).ToArray());
+
+        // Both alt slots taken: the next claimed placeholder's names do not fit.
+        db.Users.Add(new AppUser { Id = "ph2", UserName = "ph2", IsPlaceholder = true });
+        db.SaveChanges();
+        var ph2 = await CharacterWriter.LoadAsync(db, "ph2", CancellationToken.None);
+        ph2.SetNames("Otherbob", "Bob", null);
+        db.SaveChanges();
+        Member(db, 11, "ph2", "Otherbob", 5);
+
+        var second = await NewService(db).ClaimPlaceholderAsync("ph2", Real, Ls, CancellationToken.None);
+
+        Assert.True(second.Success, second.Error);
+        Assert.Equal(new[] { "Otherbob" }, second.NamesNotKept); // "Bob" is the real main already
+        Assert.Equal(new[] { "Bob", "Bobthree", "Bobalt" },
+            db.Characters.AsNoTracking().Where(c => c.AppUserId == Real).OrderBy(c => c.Slot).Select(c => c.Name).ToArray());
     }
 
     [Fact]

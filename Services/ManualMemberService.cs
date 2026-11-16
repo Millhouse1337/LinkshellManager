@@ -12,9 +12,12 @@ namespace LinkshellManagerDiscordApp.Services;
 // track them. Called from the Discord board's self-service onboarding modal
 // (OutsideSignupHandler), which keys the member to the player's Discord id so
 // later signups auto-recognize them.
+//
+// Names are written as the account's characters (CharacterWriter); the save copies the main onto
+// the account's CharacterName and the roster name. A name the account already has is skipped.
 public sealed class ManualMemberService
 {
-    public const int MaxCharacterNameLength = 64;
+    public const int MaxCharacterNameLength = CharacterWriter.MaxNameLength;
 
     private readonly ApplicationDbContext _context;
     private readonly UserManager<AppUser> _userManager;
@@ -44,12 +47,11 @@ public sealed class ManualMemberService
         int linkshellId, string? mainName, string? alt1, string? alt2, string discordUserId, CancellationToken cancellationToken,
         string? discordDisplayName = null)
     {
-        var main = (mainName ?? string.Empty).Trim();
-        if (main.Length == 0)
+        var main = Truncate(mainName);
+        if (main is null)
         {
             return new CreateResult(false, "Enter your main character name to register.", null);
         }
-        if (main.Length > MaxCharacterNameLength) { main = main[..MaxCharacterNameLength]; }
         // Alts are OPTIONAL — the main name is the only required field. a1/a2 may be
         // null here, and the find/create logic below only writes them when present.
         var a1 = Truncate(alt1);
@@ -82,31 +84,21 @@ public sealed class ManualMemberService
                     + "once they approve it, press Sign Up again.",
                     null);
             }
-            if (match.AppUser is not null)
+            if (match.AppUserId is not null)
             {
-#pragma warning disable CS0618 // Round 5 writer: the account columns are still the written source (R5.5 moves it to Characters).
-                if (!string.IsNullOrEmpty(a1)) { match.AppUser.AltCharacterName1 = a1; }
-                if (!string.IsNullOrEmpty(a2)) { match.AppUser.AltCharacterName2 = a2; }
-#pragma warning restore CS0618
+                // Their own placeholder: the alts they typed replace the ones it has.
+                var characters = await CharacterWriter.LoadAsync(_context, match.AppUserId, cancellationToken);
+                characters.TrySetName(Character.Alt1Slot, a1);
+                characters.TrySetName(Character.Alt2Slot, a2);
             }
             await _context.SaveChangesAsync(cancellationToken);
             return new CreateResult(true, null, match.AppUserId);
         }
 
-        var placeholder = new AppUser
+        var (placeholder, error) = await CreatePlaceholderAsync(main, a1, a2);
+        if (placeholder is null)
         {
-            UserName = $"placeholder-{Guid.NewGuid():N}",
-            CharacterName = main,
-#pragma warning disable CS0618 // Round 5 writer: the account columns are still the written source (R5.5 moves it to Characters).
-            AltCharacterName1 = a1,
-            AltCharacterName2 = a2,
-#pragma warning restore CS0618
-            IsPlaceholder = true,
-        };
-        var createResult = await _userManager.CreateAsync(placeholder);
-        if (!createResult.Succeeded)
-        {
-            return new CreateResult(false, string.Join("; ", createResult.Errors.Select(e => e.Description)), null);
+            return new CreateResult(false, error, null);
         }
 
         _context.AppUserLinkshells.Add(new AppUserLinkshell
@@ -119,9 +111,6 @@ public sealed class ManualMemberService
             DiscordIdConfirmed = true,
             LinkshellDkp = 0,
             DateJoined = DateTime.UtcNow,
-#pragma warning disable CS0618 // Round 5 writer: the roster name is still written, as a copy of the main (never read).
-            CharacterName = main,
-#pragma warning restore CS0618
             Rank = LinkshellRanks.Member,
             Status = "Active",
         });
@@ -142,12 +131,11 @@ public sealed class ManualMemberService
     public async Task<CreateResult> FindOrCreateByNameAsync(
         int linkshellId, string? mainName, string? alt1, string? alt2, CancellationToken cancellationToken)
     {
-        var main = (mainName ?? string.Empty).Trim();
-        if (main.Length == 0)
+        var main = Truncate(mainName);
+        if (main is null)
         {
             return new CreateResult(false, "Enter a character name to add.", null);
         }
-        if (main.Length > MaxCharacterNameLength) { main = main[..MaxCharacterNameLength]; }
         var a1 = Truncate(alt1);
         var a2 = Truncate(alt2);
 
@@ -159,31 +147,20 @@ public sealed class ManualMemberService
             string.Equals(m.AppUser!.CharacterName!.Trim(), main, StringComparison.OrdinalIgnoreCase));
         if (match is not null)
         {
-            if (match.AppUser is not null)
+            if (match.AppUserId is not null)
             {
-#pragma warning disable CS0618 // Round 5 writer: the account columns are still the written source (R5.5 moves it to Characters).
-                if (!string.IsNullOrEmpty(a1) && string.IsNullOrWhiteSpace(match.AppUser.AltCharacterName1)) { match.AppUser.AltCharacterName1 = a1; }
-                if (!string.IsNullOrEmpty(a2) && string.IsNullOrWhiteSpace(match.AppUser.AltCharacterName2)) { match.AppUser.AltCharacterName2 = a2; }
-#pragma warning restore CS0618
+                var characters = await CharacterWriter.LoadAsync(_context, match.AppUserId, cancellationToken);
+                if (characters[Character.Alt1Slot] is null) { characters.TrySetName(Character.Alt1Slot, a1); }
+                if (characters[Character.Alt2Slot] is null) { characters.TrySetName(Character.Alt2Slot, a2); }
                 await _context.SaveChangesAsync(cancellationToken);
             }
             return new CreateResult(true, null, match.AppUserId);
         }
 
-        var placeholder = new AppUser
+        var (placeholder, error) = await CreatePlaceholderAsync(main, a1, a2);
+        if (placeholder is null)
         {
-            UserName = $"placeholder-{Guid.NewGuid():N}",
-            CharacterName = main,
-#pragma warning disable CS0618 // Round 5 writer: the account columns are still the written source (R5.5 moves it to Characters).
-            AltCharacterName1 = a1,
-            AltCharacterName2 = a2,
-#pragma warning restore CS0618
-            IsPlaceholder = true,
-        };
-        var createResult = await _userManager.CreateAsync(placeholder);
-        if (!createResult.Succeeded)
-        {
-            return new CreateResult(false, string.Join("; ", createResult.Errors.Select(e => e.Description)), null);
+            return new CreateResult(false, error, null);
         }
 
         _context.AppUserLinkshells.Add(new AppUserLinkshell
@@ -192,9 +169,6 @@ public sealed class ManualMemberService
             LinkshellId = linkshellId,
             LinkshellDkp = 0,
             DateJoined = DateTime.UtcNow,
-#pragma warning disable CS0618 // Round 5 writer: the roster name is still written, as a copy of the main (never read).
-            CharacterName = main,
-#pragma warning restore CS0618
             Rank = LinkshellRanks.Member,
             Status = "Active",
         });
@@ -202,10 +176,39 @@ public sealed class ManualMemberService
         return new CreateResult(true, null, placeholder.Id);
     }
 
+    // A new placeholder account with its characters, saved together. An alt that repeats the main
+    // (or the other alt) is left out: one account never holds a name twice.
+    private async Task<(AppUser? Account, string? Error)> CreatePlaceholderAsync(string main, string? a1, string? a2)
+    {
+        var placeholder = new AppUser
+        {
+            UserName = $"placeholder-{Guid.NewGuid():N}",
+            IsPlaceholder = true,
+        };
+        var characters = CharacterWriter.ForNewAccount(_context, placeholder);
+        characters.TrySetName(Character.MainSlot, main);
+        characters.TrySetName(Character.Alt1Slot, a1);
+        characters.TrySetName(Character.Alt2Slot, a2);
+
+        var createResult = await _userManager.CreateAsync(placeholder);
+        if (!createResult.Succeeded)
+        {
+            characters.DiscardChanges();
+            return (null, string.Join("; ", createResult.Errors.Select(e => e.Description)));
+        }
+        return (placeholder, null);
+    }
+
+    // Trimmed and cut to the longest name the writer takes (counted as Postgres counts
+    // characters), or null when blank.
     private static string? Truncate(string? value)
     {
-        var trimmed = (value ?? string.Empty).Trim();
-        if (trimmed.Length == 0) { return null; }
-        return trimmed.Length > MaxCharacterNameLength ? trimmed[..MaxCharacterNameLength] : trimmed;
+        var trimmed = CharacterWriter.Clean(value);
+        if (trimmed is null || !CharacterWriter.IsTooLong(trimmed))
+        {
+            return trimmed;
+        }
+        var cut = string.Concat(trimmed.EnumerateRunes().Take(MaxCharacterNameLength).Select(rune => rune.ToString()));
+        return CharacterWriter.Clean(cut);
     }
 }

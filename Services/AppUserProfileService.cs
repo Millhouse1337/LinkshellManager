@@ -66,31 +66,25 @@ public sealed class AppUserProfileService
             });
         }
 
-        user.CharacterName = normalizedCharacterName;
+        // The names are written to Characters (CharacterWriter); the save copies the main onto the
+        // account's CharacterName and the roster names. Kept alts are left as they are.
+        var characters = await CharacterWriter.LoadAsync(_dbContext, user.Id, cancellationToken);
+        try
+        {
+            characters.SetNames(
+                normalizedCharacterName,
+                preserveExistingAlts ? characters.Name(Character.Alt1Slot) : normalizedAlt1,
+                preserveExistingAlts ? characters.Name(Character.Alt2Slot) : normalizedAlt2);
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            // The validator above refuses these first; this only catches a disagreement between the two.
+            characters.DiscardChanges();
+            return IdentityResult.Failed(new IdentityError { Code = "CharacterNameConflict", Description = ex.Message });
+        }
         user.TimeZone = normalizedTimeZone;
 
-        // The account columns are still where names are written (CharacterSync copies them into
-        // Characters on save). Kept alts are not written at all.
-        if (!preserveExistingAlts)
-        {
-#pragma warning disable CS0618 // Round 5 writer: the alt columns are still the written source.
-            user.AltCharacterName1 = normalizedAlt1;
-            user.AltCharacterName2 = normalizedAlt2;
-#pragma warning restore CS0618
-        }
-
-        var displayName = AccountCharacters.DisplayName(user);
-
-        // The roster name is still written as a copy of the main (it is no longer read).
-        var memberships = await _dbContext.AppUserLinkshells
-            .Where(link => link.AppUserId == user.Id)
-            .ToListAsync(cancellationToken);
-        foreach (var membership in memberships)
-        {
-#pragma warning disable CS0618 // Round 5 writer: the roster name is a copy of the main.
-            membership.CharacterName = displayName;
-#pragma warning restore CS0618
-        }
+        var displayName = normalizedCharacterName ?? user.UserName ?? "Unknown";
 
         // Open sign-ups follow a RENAMED character, and only that one. A member signed up on an alt
         // stays on that alt when they rename their main; renaming the alt renames the sign-up. (This

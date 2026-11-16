@@ -17,7 +17,8 @@ namespace LinkshellManagerDiscordApp.Services;
 // real player's name on purpose, and the player claims them later (PlaceholderClaimService).
 //
 // Always: the two alts must differ and an alt must differ from the main.
-// Only for names that changed: no name may be longer than the Characters table holds (256 characters).
+// Only for names that changed: no name may be longer than CharacterWriter.MaxNameLength (64 characters
+// while the old account columns are mirrored; they are varchar(64)).
 //
 // Names are compared trimmed and ignoring capitals, the way CharacterResolver compares them.
 public sealed class CharacterNameValidator
@@ -71,9 +72,9 @@ public sealed class CharacterNameValidator
 
         for (var slot = 0; slot < wanted.Length; slot++)
         {
-            if (changed[slot] && wanted[slot] is { } name && name.EnumerateRunes().Count() > Character.MaxNameLength)
+            if (changed[slot] && wanted[slot] is { } name && CharacterWriter.IsTooLong(name))
             {
-                return (false, $"Character names can be at most {Character.MaxNameLength} characters long.");
+                return (false, $"Character names can be at most {CharacterWriter.MaxNameLength} characters long.");
             }
         }
 

@@ -263,11 +263,11 @@ public sealed partial class AddonApiController
             {
                 if (issuerUser is not null && string.IsNullOrWhiteSpace(issuerUser.CharacterName))
                 {
-                    issuerUser.CharacterName = selfName;
-                    // The roster name is still written as a copy of the main (never read).
-#pragma warning disable CS0618 // Round 5 writer: the roster name is still written, as a copy of the main (never read).
-                    issuerMembership.CharacterName = selfName;
-#pragma warning restore CS0618
+                    // Written as the account's main character (CharacterWriter); the save copies it
+                    // onto the account's CharacterName and the roster names. Skipped when one of the
+                    // account's alts already has this name.
+                    var characters = await CharacterWriter.LoadAsync(_dbContext, issuerUser.Id, cancellationToken);
+                    characters.TrySetName(Character.MainSlot, selfName);
                 }
 
                 // Make sure the lookup picks up the freshly-known name even
@@ -673,15 +673,15 @@ public sealed partial class AddonApiController
         });
     }
 
-    // Stores the calling player's job-level array on their account (see MainCharacterJobs) so
-    // other addon installations can see
+    // Stores the calling player's job-level array on that character (its Characters row, through
+    // CharacterWriter) so other addon installations can see
     // (via /roster) which jobs each member has leveled. Used by the in-game loot panel's "Can
     // equip" filter and the Jobs Roster. Idempotent: overwrites that character's previous array on
     // each call.
     //
     // Only the token owner's OWN characters: the main or one of the two alts
-    // (MainCharacterJobs.OwnCharacterSlot). The main's levels go to the account's main columns, an
-    // alt's to Alt1JobLevels / Alt2JobLevels. It used to accept any name on the token's linkshell
+    // (AccountCharacters.OwnCharacterSlot). The levels go to that character's row. It used to accept
+    // any name on the token's linkshell
     // roster, so one member's addon could overwrite another member's jobs. The addon only ever posts
     // the logged-in character (party slot 0) and treats 403 as "not one of mine, stop asking"
     // (someone else's character on this login). Alts were refused before Round 5.
@@ -718,16 +718,16 @@ public sealed partial class AddonApiController
         {
             return Forbid();
         }
-        var characters = await _dbContext.Characters
-            .Where(character => character.AppUserId == owner.Id)
-            .ToListAsync(cancellationToken);
-        if (MainCharacterJobs.OwnCharacterSlot(characterName, owner, characters) is not { } own)
+        var characters = await CharacterWriter.LoadAsync(_dbContext, owner.Id, cancellationToken);
+        if (AccountCharacters.OwnCharacterSlot(characterName, owner, characters.Rows) is not { } own)
         {
             return Forbid();
         }
 
-        MainCharacterJobs.WriteJobLevels(owner, own.Slot, request.JobLevels);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        if (characters.SetJobs(own.Slot, jobLevels: request.JobLevels))
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
 
         return Ok(new { success = true, characterName = own.Name, slot = (int)own.Slot });
     }
