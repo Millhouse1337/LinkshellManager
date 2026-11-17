@@ -28,7 +28,13 @@ public sealed class PlaceholderClaimRequestService
         int Id, int MembershipId, string PlaceholderName, double PlaceholderDkp,
         string RequesterName, string RequesterKind, DateTime CreatedAtUtc);
 
-    public sealed record ResolveResult(bool Success, string? Error);
+    // NamesNotKept: on an approved account claim, the placeholder's names the account had no free
+    // alt slot for (PlaceholderClaimService.ClaimResult.NamesNotKept), so the officer can tell the
+    // player. Loot or attendance under such a name no longer finds them.
+    public sealed record ResolveResult(bool Success, string? Error)
+    {
+        public IReadOnlyList<string> NamesNotKept { get; init; } = Array.Empty<string>();
+    }
 
     // A signed-in account asks to take over a placeholder. Returns false when the same account
     // already has an open request for it (nothing new is added).
@@ -118,6 +124,7 @@ public sealed class PlaceholderClaimRequestService
             return new ResolveResult(false, "That request was already handled.");
         }
 
+        IReadOnlyList<string> namesNotKept = Array.Empty<string>();
         if (request.RequesterAppUserId is not null)
         {
             var claim = await _claims.ClaimPlaceholderAsync(
@@ -126,6 +133,7 @@ public sealed class PlaceholderClaimRequestService
             {
                 return new ResolveResult(false, claim.Error);
             }
+            namesNotKept = claim.NamesNotKept;
         }
         else
         {
@@ -170,7 +178,7 @@ public sealed class PlaceholderClaimRequestService
             row.ResolvedByAppUserId = officerAppUserId;
         }
         await _db.SaveChangesAsync(cancellationToken);
-        return new ResolveResult(true, null);
+        return new ResolveResult(true, null) { NamesNotKept = namesNotKept };
     }
 
     public async Task<ResolveResult> DenyAsync(

@@ -85,6 +85,26 @@ public class PlaceholderClaimRequestServiceTests
         Assert.True(requests.Single(r => r.RequesterAppUserId == "real").Approved);
         Assert.False(requests.Single(r => r.RequesterAppUserId == "other").Approved);
         Assert.Empty(await service.ListPendingAsync(Ls, CancellationToken.None));
+        Assert.Empty(result.NamesNotKept); // "Bobalt" is the real account's main already
+    }
+
+    // The officer's Approve passes on the placeholder names the player had no free alt slot for, so
+    // the card can tell the officer (loot or attendance under those names no longer finds them).
+    [Fact]
+    public async Task ApprovingAnAccountRequest_ReportsTheNamesThatWereNotKept()
+    {
+        using var db = NewDb();
+        var real = await CharacterWriter.LoadAsync(db, "real", CancellationToken.None);
+        real.SetNames("Bob", "Bobtwo", "Bobthree"); // both alt slots taken
+        db.SaveChanges();
+        var service = NewService(db);
+        await service.RequestForAccountAsync(Ls, "ph", "real", "Bob", CancellationToken.None);
+        var request = Assert.Single(db.PlaceholderClaimRequests);
+
+        var result = await service.ApproveAsync(Ls, request.Id, Officer, CancellationToken.None);
+
+        Assert.True(result.Success, result.Error);
+        Assert.Equal(new[] { "Bobalt" }, result.NamesNotKept);
     }
 
     [Fact]

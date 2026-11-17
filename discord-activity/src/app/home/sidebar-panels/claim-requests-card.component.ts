@@ -4,6 +4,7 @@ import { ActivityHttpClient } from '../../discord/activity-http.client';
 import { AuthService } from '../../discord/auth.service';
 import type { ActivityPlaceholderClaimRequest } from '../../discord/discord-activity.types';
 import { mutateThenRefresh } from '../../discord/mutate-then-refresh';
+import { claimApprovedMessage } from './claim-requests.helpers';
 
 // Roster card for officers: people asking to take over an imported (placeholder) member by name.
 // A character name is public, so the server only files the request; Approve here is what hands
@@ -80,13 +81,13 @@ export class ClaimRequestsCardComponent {
     try {
       // A reload that fails after the approval was saved never reports it as failed.
       await mutateThenRefresh(this.auth, {
-        mutate: () => this.http.postActivityJson(
+        mutate: () => this.http.postActivityJson<{ namesNotKept?: string[] } | null>(
           `/api/activity/linkshells/${linkshellId}/claim-requests/${request.id}/${approve ? 'approve' : 'deny'}`
         ),
         // The roster and DKP changed (a member moved or got linked).
         refresh: approve ? () => this.auth.refreshOverview() : undefined,
-        success: approve
-          ? `Approved: ${request.placeholderName} now belongs to ${request.requesterName}.`
+        success: result => approve
+          ? claimApprovedMessage(request, result?.namesNotKept ?? [])
           : `Denied ${request.requesterName}'s request for ${request.placeholderName}.`,
         failure: 'Updating the claim request failed.'
       });

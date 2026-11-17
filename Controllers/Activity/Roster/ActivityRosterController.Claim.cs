@@ -193,7 +193,11 @@ public sealed partial class ActivityRosterController
             return officer.Error;
         }
         var result = await claimRequests.ApproveAsync(linkshellId, requestId, officer.AppUserId!, cancellationToken);
-        return result.Success ? Ok(new { success = true }) : BadRequest(new { error = result.Error });
+        // namesNotKept: the placeholder's names the player had no free alt slot for. The card tells
+        // the officer, because loot or attendance under those names no longer finds the player.
+        return result.Success
+            ? Ok(new { success = true, namesNotKept = result.NamesNotKept })
+            : BadRequest(new { error = result.Error });
     }
 
     [HttpPost("linkshells/{linkshellId:int}/claim-requests/{requestId:int}/deny")]
