@@ -23,8 +23,7 @@ public class Character
     public const short Alt1Slot = 1;
     public const short Alt2Slot = 2;
 
-    // Longest name the table holds. CharacterWriter takes at most 64 for now (CharacterWriter.MaxNameLength:
-    // a rollback to update B re-adds varchar(64) copies of the alt names).
+    // Longest name the table holds. The app accepts at most CharacterWriter.MaxNameLength (64).
     public const int MaxNameLength = 256;
 
     [Key]

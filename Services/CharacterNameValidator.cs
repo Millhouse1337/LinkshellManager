@@ -17,8 +17,7 @@ namespace LinkshellManagerDiscordApp.Services;
 // real player's name on purpose, and the player claims them later (PlaceholderClaimService).
 //
 // Always: the two alts must differ and an alt must differ from the main.
-// Only for names that changed: no name may be longer than CharacterWriter.MaxNameLength (64 characters
-// while a rollback can re-add the varchar(64) alt columns; see there).
+// Only for names that changed: no name may be longer than CharacterWriter.MaxNameLength (64).
 //
 // Names are compared trimmed and ignoring capitals, the way CharacterResolver compares them.
 public sealed class CharacterNameValidator

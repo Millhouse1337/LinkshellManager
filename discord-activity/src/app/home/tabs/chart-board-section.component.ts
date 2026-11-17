@@ -463,7 +463,7 @@ export class ChartBoardSectionComponent {
   /**
    * Every character a pop item could sit on: each member, then their own alts under them.
    *
-   * Alts by their REAL names, from the same AppUser.AltCharacterName1/2 the profile registers — a
+   * Alts by their REAL names, from the same Characters alt slots the profile registers — a
    * gem on somebody's alt sits there under the alt's name, and that is what an officer looks for.
    * `altOf` is the hint beside it, so it is obvious whose it is.
    */

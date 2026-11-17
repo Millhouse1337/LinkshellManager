@@ -32,11 +32,10 @@ namespace LinkshellManagerDiscordApp.Services;
 // are simply loaded.
 public static class CharacterWriter
 {
-    // The longest name, kept while a rollback can still swap in the update B build (R5.5): its
-    // rollback SQL (Round5Contract.RollbackSql) re-adds AltCharacterName1/2 as varchar(64) and copies
-    // every name into them, and that build keeps copying on every save, so a longer name saved now
-    // would make the rollback fail. It can go up to Character.MaxNameLength one deploy after R5.7.
-    // (The game's own limit is 15, CharacterNameFormat.MaxLength.)
+    // The longest name the app accepts. Kept as the permanent limit after Round 5 (2026-11-16): the
+    // game's own limit is 15 (CharacterNameFormat.MaxLength), and a character's name is copied into
+    // other tables' name snapshots, which need not hold more. The Characters table itself holds up
+    // to Character.MaxNameLength (256), but nothing writes more than this.
     public const int MaxNameLength = 64;
 
     // pg_advisory_xact_lock(class, key) class for "changing this account's characters", the same class

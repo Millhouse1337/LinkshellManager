@@ -71,8 +71,9 @@ pre-deploy backup still has it.
 - `tools/db-wipe-activity-keep-roster.sql`: the comment now says names, jobs and crafts live only
   in `Characters`.
 - Kept on purpose: `CharacterWriter.MaxNameLength` (64). The rollback SQL below copies every name
-  into the varchar(64) alt columns again, and update B keeps copying them on every save. It can go
-  up to `Character.MaxNameLength` (256) one deploy after update C.
+  into the varchar(64) alt columns again, and update B keeps copying them on every save. After
+  update C, 64 was kept as the permanent limit (2026-11-16) rather than raised:
+  the game's limit is 15, and name snapshots in other tables need not hold more.
 
 ## Tests changed in R5.7
 
